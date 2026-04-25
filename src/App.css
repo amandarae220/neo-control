@@ -1,0 +1,89 @@
+body {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  background: #05070d;
+  color: #e6f1ff;
+}
+
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  padding: 16px;
+  background: #0e1420;
+  border-bottom: 1px solid #1c2433;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 250px 1fr 300px;
+  flex: 1;
+}
+
+.panel {
+  padding: 16px;
+}
+
+.left {
+  background: #0e1420;
+  border-right: 1px solid #1c2433;
+}
+
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.right {
+  background: #0e1420;
+  border-left: 1px solid #1c2433;
+}
+
+.threat {
+  padding: 10px;
+  margin-bottom: 10px;
+  background: #111827;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.threat.active {
+  border: 1px solid #00e5ff;
+}
+
+.earth {
+  font-size: 60px;
+}
+
+.actions button {
+  margin: 5px;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.actions .selected {
+  background: #00e5ff;
+  color: black;
+}
+
+.prediction {
+  margin-top: 16px;
+  padding: 10px;
+  background: #111827;
+  border-radius: 8px;
+}
+
+.alien {
+  padding: 12px;
+  background: #0e1420;
+  border-top: 1px solid #1c2433;
+}
