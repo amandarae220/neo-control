@@ -2,6 +2,34 @@ import type { Threat } from "../../types/game";
 import { actionProfiles, predictThreat } from "../../gameplay/missionLogic";
 import type { DefenseAction, MoonState } from "../../gameplay/missionLogic";
 
+const ROCK_SHAPES = [
+  "0,-11 7,-7 12,0 8,9 0,12 -7,8 -11,-1 -7,-9",
+  "0,-13 9,-6 11,3 6,11 -2,13 -9,7 -12,-1 -7,-9",
+  "0,-10 6,-6 10,2 5,9 -3,10 -8,4 -9,-4 -3,-10",
+  "0,-12 8,-5 11,4 5,11 -4,11 -10,4 -10,-5 -4,-11",
+];
+
+function threatSeed(id: string) {
+  return id.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+}
+
+function rockPoints(id: string, scale = 1) {
+  const base = ROCK_SHAPES[threatSeed(id) % ROCK_SHAPES.length];
+  if (scale === 1) return base;
+  return base
+    .split(" ")
+    .map((pt) => {
+      const [x, y] = pt.split(",").map(Number);
+      return `${(x * scale).toFixed(1)},${(y * scale).toFixed(1)}`;
+    })
+    .join(" ");
+}
+
+function tumbleSpeed(id: string) {
+  const seed = threatSeed(id);
+  return (seed % 2 === 0 ? 1 : -1) * (20 + (seed % 15));
+}
+
 type OrbitVizProps = {
   threats: Threat[];
   selected?: string;
@@ -9,6 +37,7 @@ type OrbitVizProps = {
   previewAction: DefenseAction;
   elapsed: number;
   moon: MoonState;
+  alienEvent?: { threatId: string; helpful: boolean } | null;
 };
 
 export default function OrbitViz({
@@ -17,7 +46,8 @@ export default function OrbitViz({
   actionsByThreat,
   previewAction,
   elapsed,
-  moon
+  moon,
+  alienEvent
 }: OrbitVizProps) {
   const width = 500;
   const height = 500;
@@ -93,18 +123,18 @@ export default function OrbitViz({
           </feMerge>
         </filter>
       </defs>
-      <rect width={width} height={height} rx="18" fill="#080c14" />
+      <rect width={width} height={height} rx="2" fill="#07060e" />
       <circle cx={centerX} cy={centerY} r={earthRadius + 12} fill="#00e5ff" opacity="0.08" />
       <circle cx={centerX} cy={centerY} r={earthRadius} fill="url(#earth-glow)" filter="url(#soft-glow)" />
       <circle
         cx={centerX}
         cy={centerY}
         r={150}
-        stroke="#243044"
+        stroke="#2a2540"
         fill="none"
         strokeDasharray="4 10"
       />
-      <circle cx={centerX} cy={centerY} r={88} stroke="#172033" fill="none" />
+      <circle cx={centerX} cy={centerY} r={88} stroke="#1c1830" fill="none" />
       <ellipse
         cx={centerX}
         cy={centerY}
@@ -147,22 +177,25 @@ export default function OrbitViz({
         const { start, control, end, prediction } = getGeometry(threat, action);
         const point = pointOnCurve(start, control, end, progress);
 
+        const angle = (elapsed * tumbleSpeed(threat.id)) % 360;
+        const scale = isSelected ? 1.35 : 1;
+
         return (
           <g key={threat.id}>
             {isSelected ? (
               <circle
                 cx={point.x}
                 cy={point.y}
-                r={10}
+                r={18}
                 className="asteroid-selection-ring"
               />
             ) : null}
-            <circle
-              cx={point.x}
-              cy={point.y}
-              r={isSelected ? 7 : 5}
-              className={`asteroid ${prediction.status}`}
-            />
+            <g transform={`translate(${point.x},${point.y}) rotate(${angle})`}>
+              <polygon
+                points={rockPoints(threat.id, scale)}
+                className={`asteroid-rock ${prediction.status}`}
+              />
+            </g>
           </g>
         );
       })}
@@ -172,13 +205,37 @@ export default function OrbitViz({
         const { start, control, end } = getGeometry(selectedThreat, previewAction);
         const point = pointOnCurve(start, control, end, progress);
 
+        const angle = (elapsed * tumbleSpeed(selectedThreat.id)) % 360;
+
         return (
-          <circle
-            cx={point.x}
-            cy={point.y}
-            r={6}
-            className="asteroid preview"
-          />
+          <g transform={`translate(${point.x},${point.y}) rotate(${angle})`}>
+            <polygon
+              points={rockPoints(selectedThreat.id)}
+              className="asteroid-rock preview"
+            />
+          </g>
+        );
+      })() : null}
+      {alienEvent ? (() => {
+        const alienThreat = threats.find((t) => t.id === alienEvent.threatId);
+        if (!alienThreat) return null;
+        const action = actionsByThreat[alienThreat.id] ?? "none";
+        const duration = Math.max(5, alienThreat.etaDays);
+        const progress = (elapsed / duration) % 1;
+        const { start, control, end } = getGeometry(alienThreat, action);
+        const point = pointOnCurve(start, control, end, progress);
+        const shipX = point.x - 26;
+        const shipY = point.y - 30;
+
+        return (
+          <g className={`alien-event ${alienEvent.helpful ? "helpful" : "hostile"}`}>
+            <line x1={shipX} y1={shipY} x2={point.x} y2={point.y} className="alien-beam" />
+            <g transform={`translate(${shipX}, ${shipY})`} className="alien-ship">
+              <ellipse cx="0" cy="4" rx="14" ry="5" className="alien-hull" />
+              <ellipse cx="0" cy="-1" rx="8" ry="7" className="alien-dome" />
+              <circle cx="0" cy="-3" r="3" className="alien-window" />
+            </g>
+          </g>
         );
       })() : null}
     </svg>

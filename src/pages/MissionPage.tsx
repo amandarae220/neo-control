@@ -1,9 +1,10 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { scenarios } from "../data/scenarios";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import OrbitViz from "../components/mission/OrbitViz";
 import {
   actionProfiles,
+  alienTransmissions,
   calculateMissionScore,
   getMoonState,
   getMissionOutcome,
@@ -45,7 +46,17 @@ export default function MissionPage() {
   const [showBriefing, setShowBriefing] = useState(true);
   const [simulationStarted, setSimulationStarted] = useState(false);
   const [missionResolved, setMissionResolved] = useState(false);
+  const [threatModifiers, setThreatModifiers] = useState<Partial<Record<string, { x: number; y: number }>>>({});
+  const [activeEvent, setActiveEvent] = useState<{ helpful: boolean; threatId: string; message: string } | null>(null);
+  const lastEventIntervalRef = useRef(-1);
   const moon = getMoonState(elapsed);
+
+  const effectiveThreats = scenario
+    ? scenario.threats.map((threat) => {
+        const mod = threatModifiers[threat.id];
+        return mod ? { ...threat, x: threat.x + mod.x, y: threat.y + mod.y } : threat;
+      })
+    : [];
 
   useEffect(() => {
     if (!simulationStarted || missionResolved) return;
@@ -82,13 +93,48 @@ export default function MissionPage() {
     setShowBriefing(true);
     setSimulationStarted(false);
     setMissionResolved(false);
+    setThreatModifiers({});
+    setActiveEvent(null);
+    lastEventIntervalRef.current = -1;
   }, [scenario?.id]);
 
-  const selectedThreat = scenario?.threats.find((threat) => threat.id === selected) ?? scenario?.threats[0];
+  useEffect(() => {
+    if (!simulationStarted || missionResolved || !scenario) return;
+    const interval = Math.floor(elapsed / 4);
+    if (interval <= 0 || interval <= lastEventIntervalRef.current) return;
+    lastEventIntervalRef.current = interval;
+    if (Math.random() > 0.42) return;
+
+    const threat = scenario.threats[Math.floor(Math.random() * scenario.threats.length)];
+    const helpful = Math.random() > 0.5;
+    const length = Math.hypot(threat.x, threat.y) || 1;
+    const magnitude = 35 + Math.random() * 35;
+    const sign = helpful ? 1 : -1;
+
+    setThreatModifiers((prev) => ({
+      ...prev,
+      [threat.id]: {
+        x: (prev[threat.id]?.x ?? 0) + sign * (threat.x / length) * magnitude,
+        y: (prev[threat.id]?.y ?? 0) + sign * (threat.y / length) * magnitude,
+      },
+    }));
+
+    const pool = helpful ? alienTransmissions.helpful : alienTransmissions.hostile;
+    const message = pool[Math.floor(Math.random() * pool.length)](threat.name);
+    setActiveEvent({ helpful, threatId: threat.id, message });
+  }, [elapsed, simulationStarted, missionResolved, scenario]);
+
+  useEffect(() => {
+    if (!activeEvent) return;
+    const timeout = window.setTimeout(() => setActiveEvent(null), 3500);
+    return () => window.clearTimeout(timeout);
+  }, [activeEvent]);
+
+  const selectedThreat = effectiveThreats.find((threat) => threat.id === selected) ?? effectiveThreats[0];
   const committedAction = selectedThreat ? actionsByThreat[selectedThreat.id] ?? "none" : "none";
   const committedPrediction = selectedThreat ? predictThreat(selectedThreat, committedAction, moon) : undefined;
   const previewPrediction = selectedThreat ? predictThreat(selectedThreat, previewAction, moon) : undefined;
-  const score = scenario ? calculateMissionScore(scenario.threats, actionsByThreat, moon) : 0;
+  const score = scenario ? calculateMissionScore(effectiveThreats, actionsByThreat, moon) : 0;
   const hasPendingChange = selectedThreat ? previewAction !== committedAction : false;
   const selectedDaysRemaining = selectedThreat ? Math.max(0, selectedThreat.etaDays - elapsed) : 0;
   const earliestDaysRemaining = scenario
@@ -97,18 +143,16 @@ export default function MissionPage() {
   const missionProgress = missionDuration > 0 ? Math.min(1, elapsed / missionDuration) : 0;
   const urgencyLabel =
     selectedDaysRemaining <= 1.5
-      ? "Critical window"
+      ? "Very close now"
       : selectedDaysRemaining <= 4
-        ? "Decision window shrinking"
-        : "Planning window open";
+        ? "Window closing"
+        : "Window open";
   const urgencyClass =
     selectedDaysRemaining <= 1.5 ? "critical" : selectedDaysRemaining <= 4 ? "warning" : "stable";
-  const missionPredictions = scenario
-    ? scenario.threats.map((threat) => ({
-        threat,
-        prediction: predictThreat(threat, actionsByThreat[threat.id] ?? "none", moon)
-      }))
-    : [];
+  const missionPredictions = effectiveThreats.map((threat) => ({
+    threat,
+    prediction: predictThreat(threat, actionsByThreat[threat.id] ?? "none", moon)
+  }));
   const deflectedCount = missionPredictions.filter(({ prediction }) => prediction.status === "deflected" || prediction.status === "lunar-assist").length;
   const moonCollisionCount = missionPredictions.filter(({ prediction }) => prediction.moonCollision).length;
   const highestImpactRisk = missionPredictions.reduce(
@@ -155,7 +199,7 @@ export default function MissionPage() {
         <aside className="panel left-panel">
           <h2>Threats</h2>
           <div className="threat-list">
-            {scenario.threats.map((threat) => {
+            {effectiveThreats.map((threat) => {
               const action = actionsByThreat[threat.id] ?? "none";
               const prediction = predictThreat(threat, action, moon);
               const isActive = selectedThreat?.id === threat.id;
@@ -229,6 +273,15 @@ export default function MissionPage() {
               </InfoTip>
             </div>
           </div>
+          {activeEvent ? (
+            <div
+              className={`transmission-toast ${activeEvent.helpful ? "helpful" : "hostile"}`}
+              aria-live="assertive"
+            >
+              <span className="transmission-label">{activeEvent.helpful ? "Transmission" : "Alert"}</span>
+              <p>{activeEvent.message}</p>
+            </div>
+          ) : null}
           {!simulationStarted && !showBriefing ? (
             <div className="start-callout">
               <div className="start-tooltip" role="status">
@@ -240,12 +293,13 @@ export default function MissionPage() {
             </div>
           ) : null}
           <OrbitViz
-            threats={scenario.threats}
+            threats={effectiveThreats}
             selected={selectedThreat?.id}
             actionsByThreat={actionsByThreat}
             previewAction={previewAction}
             elapsed={elapsed}
             moon={moon}
+            alienEvent={activeEvent}
           />
           {missionResolved ? (
             <div className="mission-result-overlay" aria-live="polite">
@@ -253,8 +307,9 @@ export default function MissionPage() {
                 <p className="eyebrow">Mission Result</p>
                 <h2>{getMissionOutcome(score)}</h2>
                 <p>
-                  The first impact window has closed. Final score locked with {deflectedCount} of {missionPredictions.length} threats off
-                  direct Earth-impact trajectories, with {moonCollisionCount} lunar collisions.
+                  Window closed. {deflectedCount} of {missionPredictions.length} rocks redirected
+                  {moonCollisionCount > 0 ? `, ${moonCollisionCount} Moon ${moonCollisionCount === 1 ? "hit" : "hits"}` : ""}.
+                  That&apos;s your final score.
                 </p>
                 <div className="result-grid">
                   <div>

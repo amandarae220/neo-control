@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npm list *)",
+      "Bash(npx --yes playwright@1.60.0 --version)",
+      "Bash(npm install *)"
+    ]
+  }
+}

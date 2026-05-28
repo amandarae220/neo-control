@@ -1,8 +1,8 @@
 body {
   margin: 0;
-  font-family: Inter, sans-serif;
-  background: #05070d;
-  color: #e6f1ff;
+  font-family: 'VT323', 'Courier New', monospace;
+  background: #060508;
+  color: #c8c0da;
 }
 
 .app {
@@ -50,7 +50,7 @@ body {
   padding: 10px;
   margin-bottom: 10px;
   background: #111827;
-  border-radius: 8px;
+  border-radius: 2px;
   cursor: pointer;
 }
 
@@ -66,7 +66,7 @@ body {
   margin: 5px;
   padding: 10px;
   border: none;
-  border-radius: 6px;
+  border-radius: 2px;
   cursor: pointer;
 }
 
@@ -79,7 +79,7 @@ body {
   margin-top: 16px;
   padding: 10px;
   background: #111827;
-  border-radius: 8px;
+  border-radius: 2px;
 }
 
 .alien {

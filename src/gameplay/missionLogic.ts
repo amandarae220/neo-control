@@ -2,6 +2,21 @@ import type { Threat } from "../types/game";
 
 export type DefenseAction = "none" | "nudge" | "fragment" | "gravity";
 
+export const alienTransmissions = {
+  helpful: [
+    (name: string) => `ANOMALY — ${name} nudged off-course by a passing vessel. Works for us.`,
+    (name: string) => `LUCKY BREAK — unidentified craft clipped ${name}. New path looks cleaner.`,
+    (name: string) => `CONTACT — ${name} had an unexpected visitor. Trajectory improved.`,
+    (name: string) => `SIGNAL — ${name} got a free nudge. Don't question it.`,
+  ],
+  hostile: [
+    (name: string) => `ALERT — Zorgon probe detected near ${name}. Trajectory compromised.`,
+    (name: string) => `WARNING — Unregistered vessel has altered ${name}'s approach vector. Recalculate.`,
+    (name: string) => `SCRAMBLE — ${name} knocked off-course by external interference.`,
+    (name: string) => `CONTACT — Unknown craft near ${name}. They're not helping.`,
+  ],
+};
+
 export type ActionProfile = {
   label: string;
   cost: number;
@@ -78,7 +93,7 @@ export const actionProfiles: Record<DefenseAction, ActionProfile> = {
     deflection: 0,
     reliability: 1,
     curve: 18,
-    note: "No intervention. Preserves budget but leaves the object on its current path."
+    note: "No action. Rock goes where it wants."
   },
   nudge: {
     label: "Kinetic Nudge",
@@ -86,7 +101,7 @@ export const actionProfiles: Record<DefenseAction, ActionProfile> = {
     deflection: 72,
     reliability: 0.9,
     curve: 36,
-    note: "Cheap and direct. Works best when there is enough time before arrival."
+    note: "Cheap and direct. Works best with time to spare."
   },
   fragment: {
     label: "Fragment",
@@ -94,7 +109,7 @@ export const actionProfiles: Record<DefenseAction, ActionProfile> = {
     deflection: 112,
     reliability: 0.68,
     curve: -42,
-    note: "Large course change with debris risk and lower reliability."
+    note: "Big shove, messy fallout. High risk, high reward."
   },
   gravity: {
     label: "Gravity Tug",
@@ -102,7 +117,7 @@ export const actionProfiles: Record<DefenseAction, ActionProfile> = {
     deflection: 58,
     reliability: 0.98,
     curve: 52,
-    note: "Reliable but gradual. Favors long lead times."
+    note: "Slow but reliable. Needs a long lead time."
   }
 };
 
@@ -178,8 +193,8 @@ export function calculateMissionScore(
 }
 
 export function getMissionOutcome(score: number) {
-  if (score >= 150) return "Clean save";
-  if (score >= 105) return "Planet defended";
-  if (score >= 75) return "Partial mitigation";
-  return "Mission failure";
+  if (score >= 150) return "Hero of Earth";
+  if (score >= 105) return "Mission Clear";
+  if (score >= 75) return "Close Call";
+  return "Earth Impacted";
 }
