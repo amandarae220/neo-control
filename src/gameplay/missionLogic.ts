@@ -69,7 +69,7 @@ function closestDistanceToSegment(
   point: { x: number; y: number },
   start: { x: number; y: number },
   end: { x: number; y: number }
-) {
+): number {
   const segmentX = end.x - start.x;
   const segmentY = end.y - start.y;
   const lengthSquared = segmentX * segmentX + segmentY * segmentY;

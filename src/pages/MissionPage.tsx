@@ -327,9 +327,26 @@ export default function MissionPage() {
                 </div>
                 <button
                   className="primary-action compact"
-                  onClick={() => navigate(nextScenario ? `/mission/${nextScenario.id}` : "/missions")}
+                  onClick={() => {
+                    if (nextScenario) {
+                      navigate(`/mission/${nextScenario.id}`);
+                    } else {
+                      navigate("/results", {
+                        state: {
+                          score,
+                          outcome: getMissionOutcome(score),
+                          deflectedCount,
+                          totalThreats: missionPredictions.length,
+                          moonCollisionCount,
+                          highestImpactRisk,
+                          highestMoonRisk,
+                          scenarioTitle: scenario.title,
+                        },
+                      });
+                    }
+                  }}
                 >
-                  {nextScenario ? "Continue to Next Mission" : "Return to Mission Select"}
+                  {nextScenario ? "Continue to Next Mission" : "View Final Results"}
                 </button>
               </div>
             </div>

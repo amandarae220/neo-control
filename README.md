@@ -1,73 +1,49 @@
-# React + TypeScript + Vite
+# NEO Control
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A browser-based planetary defense game in two modes: a pixel-art arcade shooter and a mission-planning strategy console.
 
-Currently, two official plugins are available:
+## Modes
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### Arcade — NEO Control
+Classic space invaders reimagined with a narrative. Shoot through six waves of Zorgon fleet formations, deflect gravity rocks with physics-accurate bullet bending, and make tactical route choices that alter the next wave's difficulty and score multipliers.
 
-## React Compiler
+- Pixel-art canvas renderer (no libraries — raw `CanvasRenderingContext2D`)
+- Gravity field: rocks exert real pull on your bullets and player ship
+- Shield + blast abilities with cooldowns
+- Intercepted-transmission briefings with branching route choices (e.g., gravity sector vs. high-velocity sector)
+- Persistent hi-score across retries
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Controls: `← →` move · `Z` or `SPACE` shoot · `X` shield · `C` blast · `ESC` menu
 
-## Expanding the ESLint configuration
+### Mission Console — Planetary Defense
+Turn-based asteroid threat management with a live orbital simulation.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- Assign one of four defense maneuvers (Kinetic Nudge, Fragment, Gravity Tug, Observe) to each incoming threat
+- Orbital viz updates in real time as sim-days advance; Moon moves and affects trajectories
+- Lunar assist mechanic: a deflected path that clips the Moon's gravity window gets a free bonus deflection — but moon-impact risk rises
+- Random alien transmission events shift threat positions mid-mission
+- Score formula weighs deflection quality, resource cost, debris risk, and moon damage
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Three scenarios included: Training Run (one low-risk rock), Big Rock Bad Timing (high-risk, short window), Twin Threat (two rocks, one plan each).
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Stack
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- React 19 + TypeScript
+- Vite 8
+- React Router v7
+- D3 (orbital viz geometry)
+
+## Run locally
+
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Test
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm test
 ```
+
+Covers `predictThreat` and `calculateMissionScore` — the core scoring and deflection logic.
