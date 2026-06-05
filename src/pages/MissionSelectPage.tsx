@@ -12,7 +12,11 @@ export default function MissionSelectPage() {
           <article className="mission-card" key={scenario.id}>
             <h2>{scenario.title}</h2>
             <p>{scenario.description}</p>
-            <button className="secondary-action" onClick={() => navigate(`/mission/${scenario.id}`)}>
+            <button
+              className="secondary-action"
+              aria-label={`Start mission: ${scenario.title}`}
+              onClick={() => navigate(`/mission/${scenario.id}`)}
+            >
               Start
             </button>
           </article>

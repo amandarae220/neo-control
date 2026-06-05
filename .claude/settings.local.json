@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(node -e ' *)",
+      "Bash(curl -s http://localhost:5174/)",
+      "Bash(lsof -i :5173 -sTCP:LISTEN)",
+      "Bash(kill 44044)",
+      "Bash(curl -s http://localhost:5173/)"
+    ]
+  }
+}
