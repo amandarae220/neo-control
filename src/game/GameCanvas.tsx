@@ -1334,13 +1334,62 @@ export default function GameCanvas() {
   return (
     <div className="game-wrap">
       <div className="game-row">
-        <canvas ref={canvasRef} width={W} height={H} className="game-canvas" />
+        <canvas
+          ref={canvasRef}
+          width={W} height={H}
+          className="game-canvas"
+          onTouchEnd={() => {
+            const gs = gsRef.current;
+            gs.keys.add(' ');
+            setTimeout(() => gs.keys.delete(' '), 80);
+          }}
+        />
         <div ref={sidebarRef} className="station-sidebar">
           <div className="sidebar-title">NEO-7</div>
           <div className="progress-track">
             <div ref={progressFillRef} className="progress-fill" style={{ height: '0%' }} />
           </div>
           <div className="sidebar-sub">DOCK</div>
+        </div>
+      </div>
+      <div className="touch-controls" aria-hidden="true">
+        <div className="touch-dpad">
+          <button
+            className="touch-btn"
+            onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowLeft'); }}
+            onTouchEnd={() => gsRef.current.keys.delete('ArrowLeft')}
+            onTouchCancel={() => gsRef.current.keys.delete('ArrowLeft')}
+          >←</button>
+          <button
+            className="touch-btn"
+            onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowRight'); }}
+            onTouchEnd={() => gsRef.current.keys.delete('ArrowRight')}
+            onTouchCancel={() => gsRef.current.keys.delete('ArrowRight')}
+          >→</button>
+          <button
+            className="touch-btn touch-btn-choice"
+            onTouchEnd={() => { gsRef.current.keys.add('1'); setTimeout(() => gsRef.current.keys.delete('1'), 80); }}
+          >1</button>
+          <button
+            className="touch-btn touch-btn-choice"
+            onTouchEnd={() => { gsRef.current.keys.add('2'); setTimeout(() => gsRef.current.keys.delete('2'), 80); }}
+          >2</button>
+        </div>
+        <div className="touch-actions">
+          <button
+            className="touch-btn touch-btn-fire"
+            onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
+            onTouchEnd={() => gsRef.current.keys.delete('z')}
+            onTouchCancel={() => gsRef.current.keys.delete('z')}
+          >FIRE</button>
+          <button
+            className="touch-btn"
+            onTouchEnd={() => tryShield(gsRef.current)}
+          >SHD</button>
+          <button
+            className="touch-btn"
+            onTouchEnd={() => tryBlast(gsRef.current)}
+          >BLT</button>
         </div>
       </div>
       <p className="game-hint">← → MOVE &nbsp;&nbsp; Z SHOOT &nbsp;&nbsp; X SHIELD &nbsp;&nbsp; C BLAST &nbsp;&nbsp; ESC MENU</p>

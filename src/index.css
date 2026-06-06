@@ -56,6 +56,8 @@ body::after {
 
 button {
   font: inherit;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #root {
@@ -136,6 +138,7 @@ h2 {
   width: auto;
   height: auto;
   display: block;
+  touch-action: none;
 }
 
 .game-hint {
@@ -1135,5 +1138,112 @@ button:disabled {
   .mission-briefing-overlay,
   .mission-result-overlay {
     padding: 16px;
+  }
+}
+
+/* ── result outcome ── */
+.result-outcome {
+  font-size: clamp(1.4rem, 5vw, 2.2rem);
+  color: var(--green);
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 20px rgba(102, 242, 165, 0.4);
+}
+
+/* ── touch controls (arcade game) ── */
+.touch-controls {
+  display: none;
+  width: min(420px, 95vw);
+  padding: 10px 0 2px;
+}
+
+.touch-dpad,
+.touch-actions {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.touch-btn {
+  width: 54px;
+  height: 54px;
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  border-radius: 2px;
+  background: rgba(0, 229, 255, 0.08);
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  letter-spacing: 0.06em;
+  user-select: none;
+  -webkit-user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.touch-btn:active {
+  background: rgba(0, 229, 255, 0.22);
+  border-color: var(--cyan);
+}
+
+.touch-btn-fire {
+  width: 68px;
+  background: rgba(255, 79, 216, 0.1);
+  border-color: rgba(255, 79, 216, 0.38);
+  color: var(--pink);
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+}
+
+.touch-btn-fire:active {
+  background: rgba(255, 79, 216, 0.24);
+  border-color: var(--pink);
+}
+
+.touch-btn-choice {
+  width: 38px;
+  height: 38px;
+  font-size: 0.92rem;
+  background: rgba(247, 199, 106, 0.08);
+  border-color: rgba(247, 199, 106, 0.3);
+  color: var(--amber);
+}
+
+.touch-btn-choice:active {
+  background: rgba(247, 199, 106, 0.22);
+}
+
+@media (pointer: coarse) {
+  .touch-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .game-hint {
+    display: none;
+  }
+
+  .landing-controls {
+    display: none !important;
+  }
+
+  .page-shell,
+  .mission-shell {
+    padding: 14px;
+  }
+
+  .orbit-stage {
+    padding: 12px;
+  }
+
+  .mission-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .mission-topbar {
+    align-items: start;
+    flex-direction: column;
   }
 }
