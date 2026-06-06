@@ -1254,15 +1254,17 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
 
 /* ── component ───────────────────────────────────────────────────────── */
 export default function GameCanvas() {
-  const canvasRef      = useRef<HTMLCanvasElement>(null);
-  const sidebarRef     = useRef<HTMLDivElement>(null);
-  const progressFillRef = useRef<HTMLDivElement>(null);
+  const canvasRef        = useRef<HTMLCanvasElement>(null);
+  const sidebarRef       = useRef<HTMLDivElement>(null);
+  const progressFillRef  = useRef<HTMLDivElement>(null);
+  const choiceOverlayRef = useRef<HTMLDivElement>(null);
   const navigate       = useNavigate();
   const gsRef          = useRef<GS>(introGame());
 
   useEffect(() => {
-    const canvas = canvasRef.current!;
-    const ctx    = canvas.getContext('2d')!;
+    const canvas  = canvasRef.current!;
+    const ctx     = canvas.getContext('2d')!;
+    const isTouch = window.matchMedia('(pointer: coarse)').matches;
     ctx.imageSmoothingEnabled = false;
 
     const onDown = (e: KeyboardEvent) => {
@@ -1320,6 +1322,12 @@ export default function GameCanvas() {
         }
       }
 
+      // briefing choice overlay — touch only, shown only when a choice is pending
+      if (choiceOverlayRef.current) {
+        const showChoices = isTouch && g.phase === 'brief' && g.txDone && g.txHasChoice;
+        choiceOverlayRef.current.style.display = showChoices ? 'flex' : 'none';
+      }
+
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -1371,19 +1379,6 @@ export default function GameCanvas() {
           </div>
         </div>
         <div className="touch-group">
-          <p className="touch-group-label">Briefing choice</p>
-          <div className="touch-row">
-            <button
-              className="touch-btn touch-btn-choice"
-              onTouchEnd={() => { gsRef.current.keys.add('1'); setTimeout(() => gsRef.current.keys.delete('1'), 80); }}
-            >1</button>
-            <button
-              className="touch-btn touch-btn-choice"
-              onTouchEnd={() => { gsRef.current.keys.add('2'); setTimeout(() => gsRef.current.keys.delete('2'), 80); }}
-            >2</button>
-          </div>
-        </div>
-        <div className="touch-group">
           <p className="touch-group-label">Actions</p>
           <div className="touch-row">
             <button
@@ -1401,6 +1396,29 @@ export default function GameCanvas() {
               onTouchEnd={() => tryBlast(gsRef.current)}
             >BLAST</button>
           </div>
+        </div>
+      </div>
+      <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
+        <p className="touch-group-label">Choose your route</p>
+        <div className="touch-row">
+          <button
+            className="touch-btn touch-btn-choice"
+            onTouchEnd={() => {
+              const gs = gsRef.current;
+              if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
+                Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0]));
+              }
+            }}
+          >[1]</button>
+          <button
+            className="touch-btn touch-btn-choice"
+            onTouchEnd={() => {
+              const gs = gsRef.current;
+              if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
+                Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1]));
+              }
+            }}
+          >[2]</button>
         </div>
       </div>
       <p className="touch-hint">tap screen to skip · continue briefing</p>
