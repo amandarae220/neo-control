@@ -1240,6 +1240,18 @@ button:disabled {
   background: rgba(247, 199, 106, 0.26);
 }
 
+.touch-choice-overlay {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px 14px;
+  margin: 6px auto 0;
+  background: rgba(4, 5, 14, 0.92);
+  border: 1px solid rgba(247, 199, 106, 0.42);
+  border-radius: 8px;
+}
+
 .touch-hint {
   display: none;
   margin: 2px 0 0;
