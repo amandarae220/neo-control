@@ -1154,71 +1154,113 @@ button:disabled {
 .touch-controls {
   display: none;
   width: min(420px, 95vw);
-  padding: 10px 0 2px;
+  padding: 14px 4px 6px;
+  gap: 10px;
 }
 
-.touch-dpad,
-.touch-actions {
+.touch-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.touch-group-label {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.touch-row {
   display: flex;
   gap: 8px;
-  align-items: flex-end;
+  align-items: center;
 }
 
 .touch-btn {
-  width: 54px;
-  height: 54px;
-  border: 1px solid rgba(0, 229, 255, 0.3);
+  height: 62px;
+  min-width: 62px;
+  border: 1px solid rgba(0, 229, 255, 0.38);
   border-radius: 2px;
-  background: rgba(0, 229, 255, 0.08);
+  background: rgba(0, 229, 255, 0.12);
   color: var(--cyan);
   font-family: var(--mono);
-  font-size: 1.1rem;
-  letter-spacing: 0.06em;
+  font-size: 1.4rem;
   user-select: none;
   -webkit-user-select: none;
   display: flex;
   align-items: center;
   justify-content: center;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
 }
 
 .touch-btn:active {
-  background: rgba(0, 229, 255, 0.22);
+  background: rgba(0, 229, 255, 0.28);
   border-color: var(--cyan);
 }
 
 .touch-btn-fire {
-  width: 68px;
-  background: rgba(255, 79, 216, 0.1);
-  border-color: rgba(255, 79, 216, 0.38);
+  min-width: 84px;
+  height: 62px;
+  background: rgba(255, 79, 216, 0.16);
+  border: 2px solid rgba(255, 79, 216, 0.65);
   color: var(--pink);
-  font-size: 0.85rem;
-  letter-spacing: 0.1em;
+  font-size: 0.9rem;
+  letter-spacing: 0.14em;
+  text-shadow: 0 0 14px rgba(255, 79, 216, 0.6);
 }
 
 .touch-btn-fire:active {
-  background: rgba(255, 79, 216, 0.24);
-  border-color: var(--pink);
+  background: rgba(255, 79, 216, 0.32);
+}
+
+.touch-btn-ability {
+  min-width: 72px;
+  height: 62px;
+  background: rgba(0, 229, 255, 0.07);
+  border-color: rgba(0, 229, 255, 0.28);
+  font-size: 0.76rem;
+  letter-spacing: 0.1em;
 }
 
 .touch-btn-choice {
-  width: 38px;
-  height: 38px;
-  font-size: 0.92rem;
-  background: rgba(247, 199, 106, 0.08);
-  border-color: rgba(247, 199, 106, 0.3);
+  min-width: 52px;
+  height: 52px;
+  background: rgba(247, 199, 106, 0.1);
+  border-color: rgba(247, 199, 106, 0.38);
   color: var(--amber);
+  font-size: 1.1rem;
+  text-shadow: 0 0 10px rgba(247, 199, 106, 0.4);
 }
 
 .touch-btn-choice:active {
-  background: rgba(247, 199, 106, 0.22);
+  background: rgba(247, 199, 106, 0.26);
+}
+
+.touch-hint {
+  display: none;
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  text-align: center;
 }
 
 @media (pointer: coarse) {
   .touch-controls {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
-    gap: 8px;
+  }
+
+  .touch-hint {
+    display: block;
   }
 
   .game-hint {

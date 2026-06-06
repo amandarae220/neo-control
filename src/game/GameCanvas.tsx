@@ -1353,45 +1353,57 @@ export default function GameCanvas() {
         </div>
       </div>
       <div className="touch-controls" aria-hidden="true">
-        <div className="touch-dpad">
-          <button
-            className="touch-btn"
-            onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowLeft'); }}
-            onTouchEnd={() => gsRef.current.keys.delete('ArrowLeft')}
-            onTouchCancel={() => gsRef.current.keys.delete('ArrowLeft')}
-          >←</button>
-          <button
-            className="touch-btn"
-            onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowRight'); }}
-            onTouchEnd={() => gsRef.current.keys.delete('ArrowRight')}
-            onTouchCancel={() => gsRef.current.keys.delete('ArrowRight')}
-          >→</button>
-          <button
-            className="touch-btn touch-btn-choice"
-            onTouchEnd={() => { gsRef.current.keys.add('1'); setTimeout(() => gsRef.current.keys.delete('1'), 80); }}
-          >1</button>
-          <button
-            className="touch-btn touch-btn-choice"
-            onTouchEnd={() => { gsRef.current.keys.add('2'); setTimeout(() => gsRef.current.keys.delete('2'), 80); }}
-          >2</button>
+        <div className="touch-group">
+          <p className="touch-group-label">Move</p>
+          <div className="touch-row">
+            <button
+              className="touch-btn"
+              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowLeft'); }}
+              onTouchEnd={() => gsRef.current.keys.delete('ArrowLeft')}
+              onTouchCancel={() => gsRef.current.keys.delete('ArrowLeft')}
+            >←</button>
+            <button
+              className="touch-btn"
+              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowRight'); }}
+              onTouchEnd={() => gsRef.current.keys.delete('ArrowRight')}
+              onTouchCancel={() => gsRef.current.keys.delete('ArrowRight')}
+            >→</button>
+          </div>
         </div>
-        <div className="touch-actions">
-          <button
-            className="touch-btn touch-btn-fire"
-            onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
-            onTouchEnd={() => gsRef.current.keys.delete('z')}
-            onTouchCancel={() => gsRef.current.keys.delete('z')}
-          >FIRE</button>
-          <button
-            className="touch-btn"
-            onTouchEnd={() => tryShield(gsRef.current)}
-          >SHD</button>
-          <button
-            className="touch-btn"
-            onTouchEnd={() => tryBlast(gsRef.current)}
-          >BLT</button>
+        <div className="touch-group">
+          <p className="touch-group-label">Briefing choice</p>
+          <div className="touch-row">
+            <button
+              className="touch-btn touch-btn-choice"
+              onTouchEnd={() => { gsRef.current.keys.add('1'); setTimeout(() => gsRef.current.keys.delete('1'), 80); }}
+            >1</button>
+            <button
+              className="touch-btn touch-btn-choice"
+              onTouchEnd={() => { gsRef.current.keys.add('2'); setTimeout(() => gsRef.current.keys.delete('2'), 80); }}
+            >2</button>
+          </div>
+        </div>
+        <div className="touch-group">
+          <p className="touch-group-label">Actions</p>
+          <div className="touch-row">
+            <button
+              className="touch-btn touch-btn-fire"
+              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
+              onTouchEnd={() => gsRef.current.keys.delete('z')}
+              onTouchCancel={() => gsRef.current.keys.delete('z')}
+            >FIRE</button>
+            <button
+              className="touch-btn touch-btn-ability"
+              onTouchEnd={() => tryShield(gsRef.current)}
+            >SHIELD</button>
+            <button
+              className="touch-btn touch-btn-ability"
+              onTouchEnd={() => tryBlast(gsRef.current)}
+            >BLAST</button>
+          </div>
         </div>
       </div>
+      <p className="touch-hint">tap screen to skip · continue briefing</p>
       <p className="game-hint">← → MOVE &nbsp;&nbsp; Z SHOOT &nbsp;&nbsp; X SHIELD &nbsp;&nbsp; C BLAST &nbsp;&nbsp; ESC MENU</p>
     </div>
   );
