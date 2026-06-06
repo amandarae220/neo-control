@@ -210,6 +210,13 @@ interface GravRock {
   deflected: boolean; deflectT: number;
 }
 
+interface Planet {
+  id: number; x: number; y: number; vx: number;
+  radius: number; mass: number;
+  color: string; ringColor: string;
+  hasRing: boolean; ringTilt: number;
+}
+
 interface Spark {
   x: number; y: number; vx: number; vy: number; life: number; color: string;
 }
@@ -235,8 +242,10 @@ interface GS {
   seq:       number;
   ufo:        UFO | null;
   ufoT:       number;
-  gravRocks:  GravRock[];
-  spawnRockT: number;
+  gravRocks:    GravRock[];
+  spawnRockT:   number;
+  planets:      Planet[];
+  spawnPlanetT: number;
   deflectMsg: number;
   shieldT:    number;
   shieldCD:   number;
@@ -392,6 +401,7 @@ function newGame(
     ufo: null, ufoT: (15 + Math.random() * 8) * profile.ufoFreq,
     gravRocks: [mkRock(0, profile), mkRock(1, profile)],
     spawnRockT: 5 + Math.random() * 3,
+    planets: [], spawnPlanetT: 6,
     deflectMsg: 0,
     shieldT: 0, shieldCD: 0, blastCD: 0, blastRing: 0,
     txLines: [], txLine: 0, txCh: 0, txDone: false, txWait: 0,
@@ -534,6 +544,111 @@ function tickGravRocks(gs: GS, dt: number) {
   });
 }
 
+/* ── planet mechanics ────────────────────────────────────────────────── */
+const PLANET_PALETTES = [
+  { body: '#c87941', ring: '#8a4e1e' },
+  { body: '#5a9fd4', ring: '#2e6a9a' },
+  { body: '#d4c46f', ring: '#a89035' },
+  { body: '#9e6ec0', ring: '#6b3d90' },
+  { body: '#6dbb7a', ring: '#3d8a4a' },
+  { body: '#d45a5a', ring: '#a02828' },
+];
+
+function mkPlanet(id: number): Planet {
+  const fromLeft = Math.random() > 0.5;
+  const radius   = 18 + Math.floor(Math.random() * 46);
+  const palette  = PLANET_PALETTES[Math.floor(Math.random() * PLANET_PALETTES.length)];
+  return {
+    id,
+    x:        fromLeft ? -(radius + 10) : W + radius + 10,
+    y:        35 + Math.random() * (H * 0.6),
+    vx:       fromLeft ? 18 + Math.random() * 36 : -(18 + Math.random() * 36),
+    radius,
+    mass:     radius * 80,
+    color:    palette.body,
+    ringColor: palette.ring,
+    hasRing:  Math.random() > 0.45,
+    ringTilt: 0.18 + Math.random() * 0.32,
+  };
+}
+
+const MAX_PLANETS = 3;
+
+function tickPlanets(gs: GS, dt: number) {
+  gs.spawnPlanetT -= dt;
+  if (gs.spawnPlanetT <= 0 && gs.planets.length < MAX_PLANETS) {
+    gs.planets.push(mkPlanet(gs.seq++));
+    gs.spawnPlanetT = 36 + Math.random() * 28;
+  }
+
+  gs.planets = gs.planets.filter(planet => {
+    planet.x += planet.vx * dt;
+    if (planet.x < -(planet.radius + 20) || planet.x > W + planet.radius + 20) return false;
+
+    if (gs.phase !== 'play') return true;
+
+    const infR = planet.radius * 3.5;
+
+    for (const b of gs.bullets) {
+      const dx = planet.x - b.x, dy = planet.y - b.y;
+      const dist = Math.max(planet.radius * 0.4, Math.sqrt(dx * dx + dy * dy));
+      if (dist < infR) {
+        const f = planet.mass * (infR - dist) / (infR * dist);
+        b.vx += dx * f * dt;
+        b.vy += dy * f * dt;
+      }
+    }
+
+    {
+      const dx = planet.x - gs.px, dy = planet.y - PY;
+      const dist = Math.max(planet.radius * 0.4, Math.sqrt(dx * dx + dy * dy));
+      if (dist < infR) {
+        const f = planet.mass * 0.18 * (infR - dist) / (infR * dist);
+        gs.px = Math.max(14, Math.min(W - 14, gs.px + dx * f * dt));
+      }
+    }
+
+    for (const rock of gs.gravRocks) {
+      const dx = planet.x - rock.x, dy = planet.y - rock.y;
+      const dist = Math.max(planet.radius * 0.4, Math.sqrt(dx * dx + dy * dy));
+      if (dist < infR) {
+        const f = planet.mass * 0.55 * (infR - dist) / (infR * dist);
+        rock.vx += dx * f * dt;
+        rock.vy += dy * f * dt;
+      }
+    }
+
+    for (const e of gs.enemies) {
+      if (e.state === 'form' && e.y >= e.by) {
+        // pull the formation's home position so the whole grid drifts
+        const dx = planet.x - e.bx, dy = planet.y - e.by;
+        const dist = Math.max(planet.radius * 0.4, Math.sqrt(dx * dx + dy * dy));
+        if (dist < infR) {
+          const f = planet.mass * 0.04 * (infR - dist) / (infR * dist);
+          e.bx = Math.max(12, Math.min(W - 12, e.bx + dx * f * dt));
+          e.by = Math.max(F_TOP, Math.min(H * 0.55, e.by + dy * f * dt));
+        }
+      } else if (e.state === 'dive') {
+        // pull dive trajectory directly (velocity is reset each frame so position is the lever)
+        const dx = planet.x - e.x, dy = planet.y - e.y;
+        const dist = Math.max(planet.radius * 0.4, Math.sqrt(dx * dx + dy * dy));
+        if (dist < infR) {
+          const f = planet.mass * 0.12 * (infR - dist) / (infR * dist);
+          e.x += dx * f * dt;
+          e.y += dy * f * dt;
+        }
+      }
+    }
+
+    gs.bullets = gs.bullets.filter(b => {
+      const dx = planet.x - b.x, dy = planet.y - b.y;
+      return dx * dx + dy * dy > planet.radius * planet.radius;
+    });
+
+    return true;
+  });
+}
+
 /* ── player abilities ────────────────────────────────────────────────── */
 function tryShield(gs: GS) {
   if (gs.phase !== 'play' || gs.shieldCD > 0) return;
@@ -607,7 +722,7 @@ function update(gs: GS, dt: number) {
       gs.phase = gs.lives > 0 ? 'play' : 'over';
       if (gs.phase === 'play') gs.invT = 2.5;
     }
-    tickSparks(gs, dt); tickStars(gs, dt);
+    tickSparks(gs, dt); tickStars(gs, dt); tickPlanets(gs, dt);
     return;
   }
 
@@ -624,7 +739,7 @@ function update(gs: GS, dt: number) {
       gs.txChoiceTimer = 0;
       gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0;
     }
-    tickStars(gs, dt); tickSparks(gs, dt);
+    tickStars(gs, dt); tickSparks(gs, dt); tickPlanets(gs, dt);
     return;
   }
 
@@ -656,7 +771,7 @@ function update(gs: GS, dt: number) {
         }
       }
     }
-    tickStars(gs, dt);
+    tickStars(gs, dt); tickPlanets(gs, dt);
     return;
   }
 
@@ -824,7 +939,57 @@ function update(gs: GS, dt: number) {
 
   tickUFO(gs, dt);
   tickGravRocks(gs, dt);
+  tickPlanets(gs, dt);
   tickSparks(gs, dt); tickStars(gs, dt);
+}
+
+/* ── planet draw ─────────────────────────────────────────────────────── */
+function drawPlanet(ctx: CanvasRenderingContext2D, planet: Planet) {
+  const { x, y, radius, color, ringColor, hasRing, ringTilt } = planet;
+
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, radius * 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  if (hasRing) {
+    ctx.save();
+    ctx.globalAlpha = 0.45;
+    ctx.strokeStyle = ringColor;
+    ctx.lineWidth = Math.max(3, radius * 0.15);
+    ctx.beginPath();
+    ctx.ellipse(x, y, radius * 1.75, radius * ringTilt, 0, Math.PI, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.beginPath();
+  ctx.ellipse(x, y, radius, radius * 0.26, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.10)';
+  ctx.beginPath();
+  ctx.arc(x - radius * 0.28, y - radius * 0.28, radius * 0.48, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (hasRing) {
+    ctx.save();
+    ctx.globalAlpha = 0.72;
+    ctx.strokeStyle = ringColor;
+    ctx.lineWidth = Math.max(3, radius * 0.15);
+    ctx.beginPath();
+    ctx.ellipse(x, y, radius * 1.75, radius * ringTilt, 0, 0, Math.PI);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 /* ── brief overlay ───────────────────────────────────────────────────── */
@@ -919,6 +1084,8 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
     ctx.fillStyle = s === 2 ? 'rgba(200,192,218,0.9)' : 'rgba(200,192,218,0.42)';
     ctx.fillRect(Math.floor(x), Math.floor(y), s, s);
   });
+
+  gs.planets.forEach(planet => drawPlanet(ctx, planet));
 
   if (gs.phase === 'brief') { drawBrief(ctx, gs, t); return; }
 
@@ -1167,7 +1334,16 @@ export default function GameCanvas() {
   return (
     <div className="game-wrap">
       <div className="game-row">
-        <canvas ref={canvasRef} width={W} height={H} className="game-canvas" />
+        <canvas
+          ref={canvasRef}
+          width={W} height={H}
+          className="game-canvas"
+          onTouchEnd={() => {
+            const gs = gsRef.current;
+            gs.keys.add(' ');
+            setTimeout(() => gs.keys.delete(' '), 80);
+          }}
+        />
         <div ref={sidebarRef} className="station-sidebar">
           <div className="sidebar-title">NEO-7</div>
           <div className="progress-track">
@@ -1176,6 +1352,58 @@ export default function GameCanvas() {
           <div className="sidebar-sub">DOCK</div>
         </div>
       </div>
+      <div className="touch-controls" aria-hidden="true">
+        <div className="touch-group">
+          <p className="touch-group-label">Move</p>
+          <div className="touch-row">
+            <button
+              className="touch-btn"
+              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowLeft'); }}
+              onTouchEnd={() => gsRef.current.keys.delete('ArrowLeft')}
+              onTouchCancel={() => gsRef.current.keys.delete('ArrowLeft')}
+            >←</button>
+            <button
+              className="touch-btn"
+              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowRight'); }}
+              onTouchEnd={() => gsRef.current.keys.delete('ArrowRight')}
+              onTouchCancel={() => gsRef.current.keys.delete('ArrowRight')}
+            >→</button>
+          </div>
+        </div>
+        <div className="touch-group">
+          <p className="touch-group-label">Briefing choice</p>
+          <div className="touch-row">
+            <button
+              className="touch-btn touch-btn-choice"
+              onTouchEnd={() => { gsRef.current.keys.add('1'); setTimeout(() => gsRef.current.keys.delete('1'), 80); }}
+            >1</button>
+            <button
+              className="touch-btn touch-btn-choice"
+              onTouchEnd={() => { gsRef.current.keys.add('2'); setTimeout(() => gsRef.current.keys.delete('2'), 80); }}
+            >2</button>
+          </div>
+        </div>
+        <div className="touch-group">
+          <p className="touch-group-label">Actions</p>
+          <div className="touch-row">
+            <button
+              className="touch-btn touch-btn-fire"
+              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
+              onTouchEnd={() => gsRef.current.keys.delete('z')}
+              onTouchCancel={() => gsRef.current.keys.delete('z')}
+            >FIRE</button>
+            <button
+              className="touch-btn touch-btn-ability"
+              onTouchEnd={() => tryShield(gsRef.current)}
+            >SHIELD</button>
+            <button
+              className="touch-btn touch-btn-ability"
+              onTouchEnd={() => tryBlast(gsRef.current)}
+            >BLAST</button>
+          </div>
+        </div>
+      </div>
+      <p className="touch-hint">tap screen to skip · continue briefing</p>
       <p className="game-hint">← → MOVE &nbsp;&nbsp; Z SHOOT &nbsp;&nbsp; X SHIELD &nbsp;&nbsp; C BLAST &nbsp;&nbsp; ESC MENU</p>
     </div>
   );
