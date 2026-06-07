@@ -997,7 +997,7 @@ const TX_PAD = 14;
 const TX_TOP = 56;
 const TX_LH  = 20;
 
-function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
+function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
   const bw = W - TX_PAD * 2;
   const bh = H - TX_TOP - 36;
 
@@ -1061,22 +1061,28 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
     const remaining = Math.ceil(12 - gs.txChoiceTimer);
     if (Math.sin(t * 3) > 0) {
       ctx.fillStyle = C.amber;
-      ctx.fillText(`PRESS 1 OR 2  [ AUTO: ${remaining}s ]`, W / 2, TX_TOP + bh - 10);
+      ctx.fillText(
+        isTouch ? `[ AUTO: ${remaining}s ]` : `PRESS 1 OR 2  [ AUTO: ${remaining}s ]`,
+        W / 2, TX_TOP + bh - 10,
+      );
     }
   } else if (gs.txDone) {
     if (Math.sin(t * 3) > 0) {
       ctx.fillStyle = C.muted;
-      ctx.fillText('[ SPACE TO CONTINUE ]', W / 2, TX_TOP + bh - 10);
+      ctx.fillText(
+        isTouch ? '[ TAP TO CONTINUE ]' : '[ SPACE TO CONTINUE ]',
+        W / 2, TX_TOP + bh - 10,
+      );
     }
   } else {
     ctx.fillStyle = 'rgba(122,112,136,0.5)';
-    ctx.fillText('SPACE TO SKIP', W / 2, TX_TOP + bh - 10);
+    ctx.fillText(isTouch ? 'TAP TO SKIP' : 'SPACE TO SKIP', W / 2, TX_TOP + bh - 10);
   }
   ctx.textAlign = 'left';
 }
 
 /* ── render ──────────────────────────────────────────────────────────── */
-function render(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
+function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, W, H);
 
@@ -1087,7 +1093,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
 
   gs.planets.forEach(planet => drawPlanet(ctx, planet));
 
-  if (gs.phase === 'brief') { drawBrief(ctx, gs, t); return; }
+  if (gs.phase === 'brief') { drawBrief(ctx, gs, t, isTouch); return; }
 
   // gravity rocks
   gs.gravRocks.forEach(rock => {
@@ -1176,10 +1182,10 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
   });
   ctx.globalAlpha = 1;
 
-  drawHUD(ctx, gs, t);
+  drawHUD(ctx, gs, t, isTouch);
 }
 
-function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
+function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
   ctx.font      = "16px 'VT323', monospace";
   ctx.textAlign = 'left';
 
@@ -1246,7 +1252,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
     ctx.fillStyle = C.white; ctx.fillText(`SCORE  ${gs.score}`, W / 2, H / 2 + 8);
     if (Math.sin(t * 3) > 0) {
       ctx.fillStyle = C.muted;
-      ctx.fillText('SPACE  TO  RETRY', W / 2, H / 2 + 34);
+      ctx.fillText(isTouch ? 'TAP  TO  RETRY' : 'SPACE  TO  RETRY', W / 2, H / 2 + 34);
     }
     ctx.textAlign = 'left';
   }
@@ -1258,6 +1264,7 @@ export default function GameCanvas() {
   const sidebarRef       = useRef<HTMLDivElement>(null);
   const progressFillRef  = useRef<HTMLDivElement>(null);
   const choiceOverlayRef = useRef<HTMLDivElement>(null);
+  const hudControlsRef   = useRef<HTMLDivElement>(null);
   const navigate       = useNavigate();
   const gsRef          = useRef<GS>(introGame());
 
@@ -1311,7 +1318,7 @@ export default function GameCanvas() {
       const g = gsRef.current;
       if (g.phase === 'play' || g.phase === 'die' || g.phase === 'brief') update(g, dt);
       else { tickStars(g, dt); tickSparks(g, dt); }
-      render(ctx, g, now / 1000);
+      render(ctx, g, now / 1000, isTouch);
 
       // sidebar progress bar (DOM, no React re-render)
       if (sidebarRef.current && progressFillRef.current) {
@@ -1320,6 +1327,11 @@ export default function GameCanvas() {
         if (show) {
           progressFillRef.current.style.height = `${Math.round(g.stationProgress * 100)}%`;
         }
+      }
+
+      // HUD controls — touch only, visible during play only
+      if (isTouch && hudControlsRef.current) {
+        hudControlsRef.current.style.display = g.phase === 'play' ? 'flex' : 'none';
       }
 
       // briefing choice overlay — touch only, shown only when a choice is pending
@@ -1342,16 +1354,67 @@ export default function GameCanvas() {
   return (
     <div className="game-wrap">
       <div className="game-row">
-        <canvas
-          ref={canvasRef}
-          width={W} height={H}
-          className="game-canvas"
-          onTouchEnd={() => {
-            const gs = gsRef.current;
-            gs.keys.add(' ');
-            setTimeout(() => gs.keys.delete(' '), 80);
-          }}
-        />
+        <div className="canvas-wrap">
+          <canvas
+            ref={canvasRef}
+            width={W} height={H}
+            className="game-canvas"
+            onTouchEnd={() => {
+              const gs = gsRef.current;
+              gs.keys.add(' ');
+              setTimeout(() => gs.keys.delete(' '), 80);
+            }}
+          />
+          <div ref={hudControlsRef} className="hud-controls" aria-hidden="true">
+            <div className="hud-move">
+              <button
+                className="hud-btn-dir"
+                onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowLeft'); }}
+                onTouchEnd={() => gsRef.current.keys.delete('ArrowLeft')}
+                onTouchCancel={() => gsRef.current.keys.delete('ArrowLeft')}
+              >◄</button>
+              <button
+                className="hud-btn-dir"
+                onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowRight'); }}
+                onTouchEnd={() => gsRef.current.keys.delete('ArrowRight')}
+                onTouchCancel={() => gsRef.current.keys.delete('ArrowRight')}
+              >►</button>
+            </div>
+            <div className="hud-actions">
+              <button className="hud-btn hud-btn-shield" onTouchEnd={() => tryShield(gsRef.current)}>SHLD</button>
+              <button
+                className="hud-btn hud-btn-fire"
+                onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
+                onTouchEnd={() => gsRef.current.keys.delete('z')}
+                onTouchCancel={() => gsRef.current.keys.delete('z')}
+              >FIRE</button>
+              <button className="hud-btn hud-btn-blast" onTouchEnd={() => tryBlast(gsRef.current)}>BLST</button>
+            </div>
+          </div>
+          <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
+            <p className="touch-group-label">Choose your route</p>
+            <div className="touch-row">
+              <button
+                className="touch-btn touch-btn-choice"
+                onTouchEnd={() => {
+                  const gs = gsRef.current;
+                  if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
+                    Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0]));
+                  }
+                }}
+              >[1]</button>
+              <button
+                className="touch-btn touch-btn-choice"
+                onTouchEnd={() => {
+                  const gs = gsRef.current;
+                  if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
+                    Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1]));
+                  }
+                }}
+              >[2]</button>
+            </div>
+          </div>
+        </div>
         <div ref={sidebarRef} className="station-sidebar">
           <div className="sidebar-title">NEO-7</div>
           <div className="progress-track">
@@ -1360,68 +1423,6 @@ export default function GameCanvas() {
           <div className="sidebar-sub">DOCK</div>
         </div>
       </div>
-      <div className="touch-controls" aria-hidden="true">
-        <div className="touch-group">
-          <p className="touch-group-label">Move</p>
-          <div className="touch-row">
-            <button
-              className="touch-btn"
-              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowLeft'); }}
-              onTouchEnd={() => gsRef.current.keys.delete('ArrowLeft')}
-              onTouchCancel={() => gsRef.current.keys.delete('ArrowLeft')}
-            >←</button>
-            <button
-              className="touch-btn"
-              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowRight'); }}
-              onTouchEnd={() => gsRef.current.keys.delete('ArrowRight')}
-              onTouchCancel={() => gsRef.current.keys.delete('ArrowRight')}
-            >→</button>
-          </div>
-        </div>
-        <div className="touch-group">
-          <p className="touch-group-label">Actions</p>
-          <div className="touch-row">
-            <button
-              className="touch-btn touch-btn-fire"
-              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
-              onTouchEnd={() => gsRef.current.keys.delete('z')}
-              onTouchCancel={() => gsRef.current.keys.delete('z')}
-            >FIRE</button>
-            <button
-              className="touch-btn touch-btn-ability"
-              onTouchEnd={() => tryShield(gsRef.current)}
-            >SHIELD</button>
-            <button
-              className="touch-btn touch-btn-ability"
-              onTouchEnd={() => tryBlast(gsRef.current)}
-            >BLAST</button>
-          </div>
-        </div>
-      </div>
-      <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
-        <p className="touch-group-label">Choose your route</p>
-        <div className="touch-row">
-          <button
-            className="touch-btn touch-btn-choice"
-            onTouchEnd={() => {
-              const gs = gsRef.current;
-              if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0]));
-              }
-            }}
-          >[1]</button>
-          <button
-            className="touch-btn touch-btn-choice"
-            onTouchEnd={() => {
-              const gs = gsRef.current;
-              if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1]));
-              }
-            }}
-          >[2]</button>
-        </div>
-      </div>
-      <p className="touch-hint">tap screen to skip · continue briefing</p>
       <p className="game-hint">← → MOVE &nbsp;&nbsp; Z SHOOT &nbsp;&nbsp; X SHIELD &nbsp;&nbsp; C BLAST &nbsp;&nbsp; ESC MENU</p>
     </div>
   );
