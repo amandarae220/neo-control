@@ -206,7 +206,6 @@ interface UFO {
 interface GravRock {
   id: number; x: number; y: number; vx: number; vy: number;
   mass: number; radius: number;
-  deflected: boolean; deflectT: number;
 }
 
 interface Planet {
@@ -240,11 +239,6 @@ interface GS {
   spawnRockT:   number;
   planets:      Planet[];
   spawnPlanetT: number;
-  deflectMsg: number;
-  shieldT:    number;
-  shieldCD:   number;
-  blastCD:    number;
-  blastRing:  number;
   txLines:    string[];
   txLine:     number;
   txCh:       number;
@@ -394,7 +388,6 @@ function mkRock(id: number, profile: PhysicsProfile = DEFAULT_PROFILE): GravRock
     id, x, y,
     vx: (dx / d) * spd, vy: (dy / d) * spd,
     mass: 120 * profile.gravMass, radius: 75,
-    deflected: false, deflectT: 0,
   };
 }
 
@@ -417,8 +410,6 @@ function newGame(
     gravRocks: [mkRock(0, profile), mkRock(1, profile)],
     spawnRockT: 5 + Math.random() * 3,
     planets: [], spawnPlanetT: 6,
-    deflectMsg: 0,
-    shieldT: 0, shieldCD: 0, blastCD: 0, blastRing: 0,
     txLines: [], txLine: 0, txCh: 0, txDone: false, txWait: 0,
     txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0,
     missionKind:     wave === 1 ? 'approach' : 'eliminate',
@@ -505,8 +496,6 @@ function tickGravRocks(gs: GS, dt: number) {
         rock.vy += (b.vy / bd) * 190;
         const spd = Math.sqrt(rock.vx * rock.vx + rock.vy * rock.vy);
         if (spd > 270) { rock.vx = (rock.vx / spd) * 270; rock.vy = (rock.vy / spd) * 270; }
-        rock.deflected = true; rock.deflectT = 2.5;
-        gs.deflectMsg  = 2.0;
         usedB.add(b.id);
         burst(gs, rock.x, rock.y, C.cyan, 10);
         break;
@@ -516,26 +505,10 @@ function tickGravRocks(gs: GS, dt: number) {
   gs.bullets = gs.bullets.filter(b => !usedB.has(b.id));
 
   gs.gravRocks = gs.gravRocks.filter(rock => {
-    if (rock.deflectT > 0) rock.deflectT -= dt; else rock.deflected = false;
-
     rock.x += rock.vx * dt; rock.y += rock.vy * dt;
     if (rock.x < -80 || rock.x > W + 80 || rock.y < -80 || rock.y > H + 80) return false;
 
-    if (rock.deflected) {
-      const toKill = new Set<number>();
-      gs.enemies.forEach(e => {
-        const sp = eSpr(e.kind);
-        if (hit(rock.x, rock.y, rW, rH, e.x, e.y, sprW(sp), sprH(sp))) {
-          burst(gs, e.x, e.y, eColor(e.kind, e.row), 10);
-          gs.score += Math.round(e.pts * 1.5 * gs.activeProfile.bonusMult);
-          gs.hi    = Math.max(gs.hi, gs.score);
-          toKill.add(e.id);
-        }
-      });
-      gs.enemies = gs.enemies.filter(e => !toKill.has(e.id));
-    }
-
-    if (!rock.deflected && gs.invT <= 0) {
+    if (gs.invT <= 0) {
       const pw = sprW(SPR.player), ph = sprH(SPR.player);
       if (hit(rock.x, rock.y, rW, rH, gs.px, PY, pw, ph)) killPlayer(gs);
     }
@@ -653,33 +626,6 @@ function tickPlanets(gs: GS, dt: number) {
   });
 }
 
-/* ── player abilities ────────────────────────────────────────────────── */
-function tryShield(gs: GS) {
-  if (gs.phase !== 'play' || gs.shieldCD > 0) return;
-  gs.shieldT  = 0.55;
-  gs.shieldCD = 5.0;
-}
-
-function tryBlast(gs: GS) {
-  if (gs.phase !== 'play' || gs.blastCD > 0) return;
-  const BLAST_R = 130;
-  let didHit = false;
-  gs.gravRocks.forEach(rock => {
-    const dx = rock.x - gs.px, dy = rock.y - PY;
-    if (Math.sqrt(dx * dx + dy * dy) < BLAST_R) {
-      const lateral = rock.x < gs.px ? -75 : 75;
-      rock.vx = lateral; rock.vy = -230;
-      const spd = Math.sqrt(rock.vx * rock.vx + rock.vy * rock.vy);
-      if (spd > 270) { rock.vx = (rock.vx / spd) * 270; rock.vy = (rock.vy / spd) * 270; }
-      rock.deflected = true; rock.deflectT = 2.5;
-      didHit = true;
-    }
-  });
-  if (didHit) gs.deflectMsg = 2.0;
-  burst(gs, gs.px, PY, C.green, 14);
-  gs.blastCD   = 7.0;
-  gs.blastRing = 1;
-}
 
 /* ── update ──────────────────────────────────────────────────────────── */
 function tickStars(gs: GS, dt: number) {
@@ -895,32 +841,6 @@ function update(gs: GS, dt: number) {
     gs.waveT  = 2.5;
   }
 
-  if (gs.deflectMsg > 0) gs.deflectMsg -= dt;
-  gs.shieldCD = Math.max(0, gs.shieldCD - dt);
-  gs.blastCD  = Math.max(0, gs.blastCD  - dt);
-
-  if (gs.shieldT > 0) {
-    gs.shieldT -= dt;
-    const SR = 42;
-    gs.gravRocks.forEach(rock => {
-      const dx = rock.x - gs.px, dy = rock.y - PY;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      if (dist < SR) {
-        const spd = Math.max(Math.sqrt(rock.vx * rock.vx + rock.vy * rock.vy), 165);
-        rock.vx = (dx / dist) * spd; rock.vy = (dy / dist) * spd;
-        rock.x  = gs.px + (dx / dist) * (SR + 2);
-        rock.y  = PY    + (dy / dist) * (SR + 2);
-        rock.deflected = true; rock.deflectT = 2.2;
-        gs.deflectMsg  = 2.0;
-      }
-    });
-  }
-
-  if (gs.blastRing > 0) {
-    gs.blastRing += 260 * dt;
-    if (gs.blastRing > 130) gs.blastRing = 0;
-  }
-
   tickUFO(gs, dt);
   tickGravRocks(gs, dt);
   tickPlanets(gs, dt);
@@ -1081,21 +1001,11 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
 
   // gravity rocks
   gs.gravRocks.forEach(rock => {
-    const deflFlash = rock.deflected && Math.sin(t * 14) > 0;
-    const ringAlpha = rock.deflected ? 0.4 + 0.3 * Math.sin(t * 9) : 0.10 + 0.06 * Math.sin(t * 1.8);
-    const ringRGB   = rock.deflected ? '0,229,255' : '247,199,106';
-    ctx.strokeStyle = `rgba(${ringRGB},${ringAlpha})`;
-    ctx.lineWidth   = rock.deflected ? 1.5 : 1;
+    const ringAlpha = 0.10 + 0.06 * Math.sin(t * 1.8);
+    ctx.strokeStyle = `rgba(247,199,106,${ringAlpha})`;
+    ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.arc(rock.x, rock.y, rock.radius, 0, Math.PI * 2); ctx.stroke();
-    const rockColor = rock.deflected ? (deflFlash ? C.white : C.cyan) : C.amber;
-    drawSpr(ctx, GRAV_SPR, rockColor, rock.x, rock.y, PX + 1);
-    if (!rock.deflected && rock.x > 0 && rock.x < W && rock.y > 0 && rock.y < H) {
-      ctx.fillStyle = `rgba(0,229,255,${0.45 + 0.35 * Math.sin(t * 5)})`;
-      ctx.font      = "11px 'VT323', monospace";
-      ctx.textAlign = 'center';
-      ctx.fillText('[ DEFLECT ]', rock.x, rock.y - (sprH(GRAV_SPR, PX + 1) / 2) - 5);
-      ctx.textAlign = 'left';
-    }
+    drawSpr(ctx, GRAV_SPR, C.amber, rock.x, rock.y, PX + 1);
   });
 
   // UFO
@@ -1133,22 +1043,6 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     ctx.fillRect(Math.floor(b.x - bw / 2), Math.floor(b.y - bh / 2), bw, bh);
   });
 
-  // shield bubble
-  if (gs.shieldT > 0) {
-    ctx.strokeStyle = `rgba(0,229,255,${Math.min(1, gs.shieldT * 2.2)})`;
-    ctx.lineWidth   = 2;
-    ctx.beginPath(); ctx.arc(gs.px, PY, 42, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle   = `rgba(0,229,255,${gs.shieldT * 0.12})`;
-    ctx.beginPath(); ctx.arc(gs.px, PY, 42, 0, Math.PI * 2); ctx.fill();
-  }
-
-  // blast ring
-  if (gs.blastRing > 0) {
-    ctx.strokeStyle = `rgba(102,242,165,${1 - gs.blastRing / 130})`;
-    ctx.lineWidth   = 2;
-    ctx.beginPath(); ctx.arc(gs.px, PY, gs.blastRing, 0, Math.PI * 2); ctx.stroke();
-  }
-
   // player
   if (gs.phase !== 'die' || gs.dieT > 1.2) {
     const blink = gs.invT > 0 && Math.sin(t * 12) > 0;
@@ -1167,10 +1061,10 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   });
   ctx.globalAlpha = 1;
 
-  drawHUD(ctx, gs, t, isTouch);
+  drawHUD(ctx, gs);
 }
 
-function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
+function drawHUD(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.font      = "16px 'VT323', monospace";
   ctx.textAlign = 'left';
 
@@ -1184,20 +1078,15 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bool
   ctx.textAlign = 'right';
   ctx.fillStyle = C.muted; ctx.fillText(`WAVE ${gs.wave}`, W - 8, 18);
 
-  ctx.font      = "13px 'VT323', monospace";
-  ctx.fillStyle = gs.shieldCD <= 0 ? C.cyan  : C.muted;
-  ctx.fillText(gs.shieldCD <= 0 ? '[X] SHIELD' : `[X] ${Math.ceil(gs.shieldCD)}s`, W - 8, 34);
-  ctx.fillStyle = gs.blastCD  <= 0 ? C.green : C.muted;
-  ctx.fillText(gs.blastCD  <= 0 ? '[C] BLAST'  : `[C] ${Math.ceil(gs.blastCD)}s`,  W - 8, 46);
-
   // mission progress in HUD
   if (gs.phase === 'play' || gs.phase === 'die') {
+    ctx.font = "13px 'VT323', monospace";
     const pct = gs.missionKind === 'approach'
       ? Math.round(gs.stationProgress * 100)
       : gs.totalEnemies > 0 ? Math.round((1 - gs.enemies.length / gs.totalEnemies) * 100) : 0;
     const label = gs.missionKind === 'approach' ? 'DOCK' : 'ELIM';
     ctx.fillStyle = C.green;
-    ctx.fillText(`${label}: ${pct}%`, W - 8, 58);
+    ctx.fillText(`${label}: ${pct}%`, W - 8, 34);
   }
 
   ctx.font      = "16px 'VT323', monospace";
@@ -1220,30 +1109,6 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bool
     ctx.textAlign = 'left';
   }
 
-  // deflect banner
-  if (gs.deflectMsg > 0) {
-    ctx.font      = "26px 'VT323', monospace";
-    ctx.textAlign = 'center';
-    ctx.fillStyle = C.cyan;
-    ctx.globalAlpha = Math.min(1, gs.deflectMsg);
-    ctx.fillText('DEFLECT!', W / 2, PY - 55);
-    ctx.globalAlpha = 1;
-    ctx.textAlign = 'left';
-  }
-
-  // game over
-  if (gs.phase === 'over') {
-    ctx.font      = "32px 'VT323', monospace";
-    ctx.textAlign = 'center';
-    ctx.fillStyle = C.red;   ctx.fillText('GAME OVER', W / 2, H / 2 - 24);
-    ctx.font      = "18px 'VT323', monospace";
-    ctx.fillStyle = C.white; ctx.fillText(`SCORE  ${gs.score}`, W / 2, H / 2 + 8);
-    if (Math.sin(t * 3) > 0) {
-      ctx.fillStyle = C.muted;
-      ctx.fillText(isTouch ? 'TAP  TO  RETRY' : 'SPACE  TO  RETRY', W / 2, H / 2 + 34);
-    }
-    ctx.textAlign = 'left';
-  }
 }
 
 /* ── component ───────────────────────────────────────────────────────── */
@@ -1301,8 +1166,6 @@ export default function GameCanvas() {
         }
       }
 
-      if (e.key === 'x' || e.key === 'X') tryShield(gsRef.current);
-      if (e.key === 'c' || e.key === 'C') tryBlast(gsRef.current);
     };
     const onUp = (e: KeyboardEvent) => gsRef.current.keys.delete(e.key);
 
@@ -1503,7 +1366,7 @@ export default function GameCanvas() {
           <div className="sidebar-sub">DOCK</div>
         </div>
       </div>
-      <p className="game-hint">← → MOVE &nbsp;&nbsp; Z SHOOT &nbsp;&nbsp; X SHIELD &nbsp;&nbsp; C BLAST &nbsp;&nbsp; ESC MENU</p>
+      <p className="game-hint">← → MOVE &nbsp;&nbsp; Z SHOOT &nbsp;&nbsp; ESC MENU</p>
     </div>
   );
 }
