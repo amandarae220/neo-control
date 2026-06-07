@@ -87,3 +87,8 @@ body {
   background: #0e1420;
   border-top: 1px solid #1c2433;
 }
+
+canvas.game-canvas {
+  height: 100%;
+  margin-top: 1rem;
+}

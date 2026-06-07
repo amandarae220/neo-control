@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { submitScore, fetchTopScores } from '../lib/scores';
 
 /* ── canvas dimensions ───────────────────────────────────────────────── */
 const W = 420;
@@ -13,12 +15,6 @@ const B_SPD = -300;      // player bullet speed px/s (up)
 const EB_SPD = 150;      // enemy bullet speed px/s (down)
 const MAX_BULLETS = 3;
 
-const F_COLS = 10;
-const F_ROWS = 4;
-const F_GAPX = 36;
-const F_GAPY = 28;
-const F_TOP  = 70;
-const F_LEFT = (W - (F_COLS - 1) * F_GAPX) / 2; // ≈ 48
 
 /* ── palette ─────────────────────────────────────────────────────────── */
 const C = {
@@ -182,17 +178,20 @@ const TRANSMISSIONS: WaveBrief[] = [
 ];
 
 /* ── types ───────────────────────────────────────────────────────────── */
-type Phase = 'play' | 'die' | 'over' | 'brief';
-type EK    = 0 | 1 | 2;          // 0 = rock · 1 = alien · 2 = boss
-type ES    = 'form' | 'dive';
+type Phase  = 'play' | 'die' | 'over' | 'brief';
+type EK     = 0 | 1 | 2;          // 0 = rock · 1 = alien · 2 = boss
+type EMove  = 'drift' | 'sweep' | 'swoop' | 'chase';
 
 interface Enemy {
   id: number; kind: EK; row: number; col: number;
-  x: number;  y: number;
-  bx: number; by: number;
-  state: ES;
+  x: number; y: number;
   vx: number; vy: number;
-  sp: number;
+  move: EMove;
+  t: number;        // time alive (s) — drives sweep sine
+  amp: number;      // sweep amplitude (px)
+  freq: number;     // sweep frequency (rad/s)
+  originX: number;  // sweep reference X
+  shootCD: number;  // seconds until next shot
   pts: number; dpts: number;
 }
 
@@ -227,13 +226,8 @@ interface GS {
   px:      number;
   invT:    number;
   shootT:  number;
-  eShootT: number;
-  diveT:   number;
   waveT:   number;
   dieT:    number;
-  fmOff:   number;
-  fmDir:   number;
-  fmSpd:   number;
   bullets:   Bullet[];
   enemies:   Enemy[];
   sparks:    Spark[];
@@ -261,7 +255,8 @@ interface GS {
   txProfiles:    [PhysicsProfile, PhysicsProfile] | null;
   txChoiceTimer: number;
   missionKind:     'approach' | 'eliminate';
-  stationProgress: number; // 0-1, wave 1 approach only
+  stationProgress: number;
+  totalEnemies:    number;
   activeProfile:   PhysicsProfile;
 }
 
@@ -334,25 +329,45 @@ function burst(gs: GS, x: number, y: number, color: string, n = 8) {
 }
 
 /* ── wave builder ────────────────────────────────────────────────────── */
-function buildWave(wave: number): Enemy[] {
+function buildWave(wave: number, profile: PhysicsProfile = DEFAULT_PROFILE): Enemy[] {
+  const count = Math.min(6 + wave * 3, 24);
   const arr: Enemy[] = [];
-  let id = 0;
-  for (let row = 0; row < F_ROWS; row++) {
-    const kind: EK = row === 0 ? 2 : row === 1 ? 1 : 0;
-    for (let col = 0; col < F_COLS; col++) {
-      const bx = F_LEFT + col * F_GAPX;
-      const by = F_TOP  + row * F_GAPY;
-      arr.push({
-        id: id++, kind, row, col,
-        x: bx, y: -55 - row * 28,
-        bx, by,
-        state: 'form',
-        vx: 0, vy: 110 + wave * 5,
-        sp: Math.random() * Math.PI * 2,
-        pts:  kind === 2 ? 50  : kind === 1 ? 20 : 10,
-        dpts: kind === 2 ? 150 : kind === 1 ? 60 : 30,
-      });
+  const allMoves: EMove[] = ['drift', 'drift', 'sweep', 'swoop', 'chase'];
+  if (wave >= 3) allMoves.push('chase', 'swoop');
+  if (wave >= 5) allMoves.push('chase', 'chase');
+
+  for (let i = 0; i < count; i++) {
+    const rng  = Math.random();
+    const kind: EK = rng < 0.12 + wave * 0.03 ? 2 : rng < 0.35 + wave * 0.02 ? 1 : 0;
+    const row  = kind === 2 ? 0 : kind === 1 ? 1 : Math.floor(Math.random() * 2) + 2;
+    const move = allMoves[Math.floor(Math.random() * allMoves.length)];
+    const baseSpd = (42 + wave * 9 + Math.random() * 18) * profile.rockSpeed;
+
+    // all enemies enter from top, staggered
+    const x = 16 + Math.random() * (W - 32);
+    const y = -30 - i * 22;
+
+    let vx = 0;
+    let vy = baseSpd * 0.5;
+    if (move === 'drift') {
+      vx = (Math.random() - 0.5) * baseSpd * 0.85;
+      vy = baseSpd * (0.35 + Math.random() * 0.3);
+    } else if (move === 'swoop') {
+      vx = (Math.random() > 0.5 ? 1 : -1) * baseSpd * 0.65;
+      vy = baseSpd * 0.28;
     }
+
+    arr.push({
+      id: i, kind, row, col: i % 10,
+      x, y, vx, vy,
+      move, t: 0,
+      amp:     28 + Math.random() * 36,
+      freq:    1.0 + Math.random() * 1.4,
+      originX: x,
+      shootCD: 2 + Math.random() * 5,
+      pts:  kind === 2 ? 50  : kind === 1 ? 20 : 10,
+      dpts: kind === 2 ? 150 : kind === 1 ? 60 : 30,
+    });
   }
   return arr;
 }
@@ -390,13 +405,13 @@ function newGame(
   lives   = 3,
   profile: PhysicsProfile = DEFAULT_PROFILE,
 ): GS {
+  const enemies = buildWave(wave, profile);
   return {
     phase: 'play', score, hi, lives, wave,
-    px: W / 2, invT: 2, shootT: 0, eShootT: 2,
-    diveT: 3.5 * profile.diveFreq,
+    px: W / 2, invT: 2, shootT: 0,
     waveT: 0, dieT: 0,
-    fmOff: 0, fmDir: 1, fmSpd: 18 + wave * 2,
-    bullets: [], enemies: buildWave(wave), sparks: [],
+    enemies, sparks: [],
+    bullets: [],
     stars: mkStars(), keys: new Set(), seq: 1000,
     ufo: null, ufoT: (15 + Math.random() * 8) * profile.ufoFreq,
     gravRocks: [mkRock(0, profile), mkRock(1, profile)],
@@ -408,6 +423,7 @@ function newGame(
     txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0,
     missionKind:     wave === 1 ? 'approach' : 'eliminate',
     stationProgress: 0,
+    totalEnemies:    enemies.length,
     activeProfile:   profile,
   };
 }
@@ -619,24 +635,12 @@ function tickPlanets(gs: GS, dt: number) {
     }
 
     for (const e of gs.enemies) {
-      if (e.state === 'form' && e.y >= e.by) {
-        // pull the formation's home position so the whole grid drifts
-        const dx = planet.x - e.bx, dy = planet.y - e.by;
-        const dist = Math.max(planet.radius * 0.4, Math.sqrt(dx * dx + dy * dy));
-        if (dist < infR) {
-          const f = planet.mass * 0.04 * (infR - dist) / (infR * dist);
-          e.bx = Math.max(12, Math.min(W - 12, e.bx + dx * f * dt));
-          e.by = Math.max(F_TOP, Math.min(H * 0.55, e.by + dy * f * dt));
-        }
-      } else if (e.state === 'dive') {
-        // pull dive trajectory directly (velocity is reset each frame so position is the lever)
-        const dx = planet.x - e.x, dy = planet.y - e.y;
-        const dist = Math.max(planet.radius * 0.4, Math.sqrt(dx * dx + dy * dy));
-        if (dist < infR) {
-          const f = planet.mass * 0.12 * (infR - dist) / (infR * dist);
-          e.x += dx * f * dt;
-          e.y += dy * f * dt;
-        }
+      const dx = planet.x - e.x, dy = planet.y - e.y;
+      const dist = Math.max(planet.radius * 0.4, Math.sqrt(dx * dx + dy * dy));
+      if (dist < infR) {
+        const f = planet.mass * 0.08 * (infR - dist) / (infR * dist);
+        e.x = Math.max(12, Math.min(W - 12, e.x + dx * f * dt));
+        e.y += dy * f * dt;
       }
     }
 
@@ -700,19 +704,6 @@ function killPlayer(gs: GS) {
   gs.dieT  = 1.8;
 }
 
-function launchDive(gs: GS) {
-  const fm     = gs.enemies.filter(e => e.state === 'form');
-  if (!fm.length) return;
-  const bosses = fm.filter(e => e.kind === 2);
-  const aliens = fm.filter(e => e.kind === 1);
-  const pool   = bosses.length ? bosses : aliens.length ? aliens : fm;
-  const leader = pool[Math.floor(Math.random() * pool.length)];
-  leader.state = 'dive'; leader.vx = 0; leader.vy = 0;
-  fm
-    .filter(e => e.id !== leader.id && e.row > leader.row && Math.abs(e.col - leader.col) <= 1)
-    .slice(0, 2)
-    .forEach(e => { e.state = 'dive'; e.vx = 0; e.vy = 0; e.sp = leader.sp + 1.2; });
-}
 
 function update(gs: GS, dt: number) {
   /* ── death pause ── */
@@ -775,23 +766,41 @@ function update(gs: GS, dt: number) {
     return;
   }
 
-  /* ── fly-in ── */
-  let allIn = true;
+  /* ── individual enemy movement ── */
   gs.enemies.forEach(e => {
-    if (e.state === 'form' && e.y < e.by) {
-      e.y = Math.min(e.by, e.y + e.vy * dt);
-      if (e.y < e.by) allIn = false;
+    e.t += dt;
+    switch (e.move) {
+      case 'drift':
+        e.x += e.vx * dt;
+        e.y += e.vy * dt;
+        if (e.x < 12)     { e.x = 12;     e.vx =  Math.abs(e.vx); }
+        if (e.x > W - 12) { e.x = W - 12; e.vx = -Math.abs(e.vx); }
+        break;
+      case 'sweep':
+        e.x  = Math.max(12, Math.min(W - 12, e.originX + Math.sin(e.t * e.freq) * e.amp));
+        e.y += e.vy * dt;
+        break;
+      case 'swoop':
+        e.x += e.vx * dt;
+        e.y += e.vy * dt;
+        e.vy = Math.min(e.vy + 28 * dt, 200);
+        if (e.x < 12)     { e.x = 12;     e.vx =  Math.abs(e.vx) * 0.8; }
+        if (e.x > W - 12) { e.x = W - 12; e.vx = -Math.abs(e.vx) * 0.8; }
+        break;
+      case 'chase': {
+        const dx = gs.px - e.x;
+        e.vx = Math.max(-110, Math.min(110, e.vx + Math.sign(dx) * Math.min(Math.abs(dx), 60) * dt));
+        e.x  = Math.max(12, Math.min(W - 12, e.x + e.vx * dt));
+        e.y += e.vy * dt;
+        break;
+      }
+    }
+    // wrap: if enemy exits bottom, re-enter from top
+    if (e.y > H + 40) {
+      e.y = -30; e.x = 16 + Math.random() * (W - 32);
+      e.originX = e.x; e.t = 0;
     }
   });
-
-  /* ── formation oscillation ── */
-  if (allIn) {
-    gs.fmOff += gs.fmDir * gs.fmSpd * dt;
-    if (Math.abs(gs.fmOff) >= 32) { gs.fmDir *= -1; gs.fmOff = Math.sign(gs.fmOff) * 32; }
-    gs.enemies.forEach(e => {
-      if (e.state === 'form') { e.x = e.bx + gs.fmOff; e.y = e.by; }
-    });
-  }
 
   /* ── player move ── */
   gs.invT = Math.max(0, gs.invT - dt);
@@ -822,7 +831,7 @@ function update(gs: GS, dt: number) {
       const sp = eSpr(e.kind);
       if (hit(b.x, b.y, PX, PX * 3, e.x, e.y, sprW(sp), sprH(sp))) {
         burst(gs, e.x, e.y, eColor(e.kind, e.row));
-        gs.score += Math.round((e.state === 'dive' ? e.dpts : e.pts) * gs.activeProfile.bonusMult);
+        gs.score += Math.round((e.y > H * 0.55 ? e.dpts : e.pts) * gs.activeProfile.bonusMult);
         gs.hi = Math.max(gs.hi, gs.score);
         killedEnemies.add(e.id);
         usedBullets.add(b.id);
@@ -846,12 +855,11 @@ function update(gs: GS, dt: number) {
     }
   }
 
-  /* ── diving enemies → player ── */
+  /* ── enemies → player collision ── */
   if (gs.invT <= 0) {
     const pw = sprW(SPR.player), ph = sprH(SPR.player);
     for (let i = gs.enemies.length - 1; i >= 0; i--) {
       const e = gs.enemies[i];
-      if (e.state !== 'dive') continue;
       const sp = eSpr(e.kind);
       if (hit(e.x, e.y, sprW(sp), sprH(sp), gs.px, PY, pw, ph)) {
         burst(gs, e.x, e.y, eColor(e.kind, e.row));
@@ -862,38 +870,14 @@ function update(gs: GS, dt: number) {
     }
   }
 
-  /* ── dive trigger ── */
-  if (allIn) {
-    gs.diveT -= dt;
-    if (gs.diveT <= 0) {
-      launchDive(gs);
-      gs.diveT = (2.5 + Math.random() * 2) * gs.activeProfile.diveFreq;
-    }
-  }
-
-  /* ── update divers ── */
+  /* ── enemy shoot ── */
   gs.enemies.forEach(e => {
-    if (e.state !== 'dive') return;
-    e.sp += dt * 3.4;
-    e.vx  = Math.sin(e.sp) * 95;
-    e.vy  = 148 + gs.wave * 7;
-    e.x  += e.vx * dt;
-    e.y  += e.vy * dt;
-    if (e.y > H + 24) {
-      e.state = 'form'; e.x = e.bx; e.y = -32; e.vx = 0; e.vy = 110;
+    e.shootCD -= dt;
+    if (e.shootCD <= 0) {
+      gs.bullets.push({ id: gs.seq++, x: e.x, y: e.y + 8, vx: 0, vy: EB_SPD, player: false });
+      e.shootCD = 2.5 + Math.random() * 4.5;
     }
   });
-
-  /* ── enemy shoot ── */
-  gs.eShootT -= dt;
-  if (gs.eShootT <= 0) {
-    const divers = gs.enemies.filter(e => e.state === 'dive');
-    if (divers.length) {
-      const sh = divers[Math.floor(Math.random() * divers.length)];
-      gs.bullets.push({ id: gs.seq++, x: sh.x, y: sh.y + 8, vx: 0, vy: EB_SPD, player: false });
-    }
-    gs.eShootT = 0.6 + Math.random() * 0.9;
-  }
 
   /* ── station approach: passive progress fill ── */
   if (gs.missionKind === 'approach') {
@@ -1123,8 +1107,9 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   // enemies
   gs.enemies.forEach(e => {
     const col   = eColor(e.kind, e.row);
-    const flash = e.state === 'dive' && Math.sin(t * 13) > 0.55;
-    drawSpr(ctx, eSpr(e.kind), flash ? C.white : col, e.x, e.y);
+    const flash = e.y > H * 0.55 && Math.sin(t * 13) > 0.55;
+    const bob   = Math.sin(t * 1.1 + e.col * 0.45) * 2.5;
+    drawSpr(ctx, eSpr(e.kind), flash ? C.white : col, e.x, e.y + bob);
   });
 
   // station icon (wave 1 approach, top center, fades in when progress > 0.6)
@@ -1205,11 +1190,14 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bool
   ctx.fillStyle = gs.blastCD  <= 0 ? C.green : C.muted;
   ctx.fillText(gs.blastCD  <= 0 ? '[C] BLAST'  : `[C] ${Math.ceil(gs.blastCD)}s`,  W - 8, 46);
 
-  // wave 1 approach: dock progress in HUD
-  if (gs.missionKind === 'approach' && (gs.phase === 'play' || gs.phase === 'die')) {
-    const pct = Math.round(gs.stationProgress * 100);
+  // mission progress in HUD
+  if (gs.phase === 'play' || gs.phase === 'die') {
+    const pct = gs.missionKind === 'approach'
+      ? Math.round(gs.stationProgress * 100)
+      : gs.totalEnemies > 0 ? Math.round((1 - gs.enemies.length / gs.totalEnemies) * 100) : 0;
+    const label = gs.missionKind === 'approach' ? 'DOCK' : 'ELIM';
     ctx.fillStyle = C.green;
-    ctx.fillText(`DOCK: ${pct}%`, W - 8, 58);
+    ctx.fillText(`${label}: ${pct}%`, W - 8, 58);
   }
 
   ctx.font      = "16px 'VT323', monospace";
@@ -1265,6 +1253,15 @@ export default function GameCanvas() {
   const progressFillRef  = useRef<HTMLDivElement>(null);
   const choiceOverlayRef = useRef<HTMLDivElement>(null);
   const hudControlsRef   = useRef<HTMLDivElement>(null);
+  const lbOverlayRef     = useRef<HTMLDivElement>(null);
+  const lbScoreRef       = useRef<HTMLParagraphElement>(null);
+  const lbNameSectionRef = useRef<HTMLDivElement>(null);
+  const lbBoardRef       = useRef<HTMLDivElement>(null);
+  const lbInputRef       = useRef<HTMLInputElement>(null);
+  const lbListRef        = useRef<HTMLOListElement>(null);
+  const lbSubmitRef      = useRef<HTMLButtonElement>(null);
+  const lbRetryRef       = useRef<HTMLButtonElement>(null);
+  const lbCapturedRef    = useRef({ score: 0, wave: 1 });
   const navigate       = useNavigate();
   const gsRef          = useRef<GS>(introGame());
 
@@ -1274,7 +1271,9 @@ export default function GameCanvas() {
     const isTouch = window.matchMedia('(pointer: coarse)').matches;
     ctx.imageSmoothingEnabled = false;
 
+
     const onDown = (e: KeyboardEvent) => {
+      if (document.activeElement === lbInputRef.current) return;
       e.preventDefault();
       gsRef.current.keys.add(e.key);
       if (e.key === 'Escape') navigate('/');
@@ -1310,6 +1309,50 @@ export default function GameCanvas() {
     window.addEventListener('keydown', onDown);
     window.addEventListener('keyup',   onUp);
 
+    // ── leaderboard handlers ─────────────────────────────────────────────
+    const handleLbSubmit = async () => {
+      const submitBtn = lbSubmitRef.current;
+      if (!submitBtn || submitBtn.disabled) return;
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'SUBMITTING…';
+
+      const name  = (lbInputRef.current?.value.trim().toUpperCase().slice(0, 6)) || 'PILOT';
+      const { score, wave } = lbCapturedRef.current;
+
+      await submitScore(name, score, wave);
+      const top = await fetchTopScores(10);
+
+      if (lbListRef.current) {
+        lbListRef.current.innerHTML = top.map((s, i) => {
+          const highlight = s.score === score && s.name === name;
+          return `<li class="lb-list-item${highlight ? ' lb-highlight' : ''}">
+            <span class="lb-rank">${String(i + 1).padStart(2, '0')}</span>
+            <span class="lb-name">${s.name}</span>
+            <span class="lb-pts">${s.score.toLocaleString()}</span>
+          </li>`;
+        }).join('');
+      }
+
+      if (lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'none';
+      if (lbBoardRef.current)       lbBoardRef.current.style.display = 'flex';
+    };
+
+    const handleLbKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') handleLbSubmit();
+    };
+
+    const handleRetry = () => {
+      gsRef.current = newGame(1, 0, gsRef.current.hi, 3);
+    };
+
+    const submitEl = lbSubmitRef.current!;
+    const inputEl  = lbInputRef.current!;
+    const retryEl  = lbRetryRef.current!;
+
+    submitEl.addEventListener('click', handleLbSubmit);
+    inputEl.addEventListener('keydown', handleLbKey);
+    retryEl.addEventListener('click', handleRetry);
+
     let last = performance.now();
     let raf  = 0;
     const tick = (now: number) => {
@@ -1322,10 +1365,13 @@ export default function GameCanvas() {
 
       // sidebar progress bar (DOM, no React re-render)
       if (sidebarRef.current && progressFillRef.current) {
-        const show = g.missionKind === 'approach' && (g.phase === 'play' || g.phase === 'die');
+        const show = g.phase === 'play' || g.phase === 'die';
         sidebarRef.current.style.display = show ? 'flex' : 'none';
         if (show) {
-          progressFillRef.current.style.height = `${Math.round(g.stationProgress * 100)}%`;
+          const pct = g.missionKind === 'approach'
+            ? Math.round(g.stationProgress * 100)
+            : g.totalEnemies > 0 ? Math.round((1 - g.enemies.length / g.totalEnemies) * 100) : 0;
+          progressFillRef.current.style.height = `${pct}%`;
         }
       }
 
@@ -1340,6 +1386,26 @@ export default function GameCanvas() {
         choiceOverlayRef.current.style.display = showChoices ? 'flex' : 'none';
       }
 
+      // leaderboard overlay — appears on game over, resets when game restarts
+      if (lbOverlayRef.current) {
+        if (g.phase === 'over' && lbOverlayRef.current.style.display === 'none') {
+          lbCapturedRef.current = { score: g.score, wave: g.wave };
+          if (lbScoreRef.current) lbScoreRef.current.textContent = g.score.toLocaleString();
+          if (!supabase && lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'none';
+          lbOverlayRef.current.style.display = 'flex';
+        }
+        if (g.phase !== 'over') {
+          lbOverlayRef.current.style.display = 'none';
+          if (lbNameSectionRef.current) lbNameSectionRef.current.style.display = supabase ? 'flex' : 'none';
+          if (lbBoardRef.current) lbBoardRef.current.style.display = 'none';
+          if (lbInputRef.current) lbInputRef.current.value = '';
+          if (lbSubmitRef.current) {
+            lbSubmitRef.current.disabled = false;
+            lbSubmitRef.current.textContent = 'SUBMIT SCORE';
+          }
+        }
+      }
+
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -1348,6 +1414,9 @@ export default function GameCanvas() {
       cancelAnimationFrame(raf);
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup',   onUp);
+      submitEl.removeEventListener('click', handleLbSubmit);
+      inputEl.removeEventListener('keydown', handleLbKey);
+      retryEl.removeEventListener('click', handleRetry);
     };
   }, [navigate]);
 
@@ -1365,31 +1434,42 @@ export default function GameCanvas() {
               setTimeout(() => gs.keys.delete(' '), 80);
             }}
           />
-          <div ref={hudControlsRef} className="hud-controls" aria-hidden="true">
-            <div className="hud-move">
-              <button
-                className="hud-btn-dir"
-                onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowLeft'); }}
-                onTouchEnd={() => gsRef.current.keys.delete('ArrowLeft')}
-                onTouchCancel={() => gsRef.current.keys.delete('ArrowLeft')}
-              >◄</button>
-              <button
-                className="hud-btn-dir"
-                onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowRight'); }}
-                onTouchEnd={() => gsRef.current.keys.delete('ArrowRight')}
-                onTouchCancel={() => gsRef.current.keys.delete('ArrowRight')}
-              >►</button>
+          <div ref={hudControlsRef} className="hud-controls" style={{ display: 'none' }} aria-hidden="true">
+            <button
+              className="hud-btn-dir"
+              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowLeft'); }}
+              onTouchEnd={() => gsRef.current.keys.delete('ArrowLeft')}
+              onTouchCancel={() => gsRef.current.keys.delete('ArrowLeft')}
+            >◄</button>
+            <button
+              className="hud-btn hud-btn-fire"
+              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
+              onTouchEnd={() => gsRef.current.keys.delete('z')}
+              onTouchCancel={() => gsRef.current.keys.delete('z')}
+            >FIRE</button>
+            <button
+              className="hud-btn-dir"
+              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowRight'); }}
+              onTouchEnd={() => gsRef.current.keys.delete('ArrowRight')}
+              onTouchCancel={() => gsRef.current.keys.delete('ArrowRight')}
+            >►</button>
+          </div>
+          <div ref={lbOverlayRef} className="lb-overlay" style={{ display: 'none' }}>
+            <p className="lb-header">GAME OVER</p>
+            <div className="lb-score-block">
+              <p className="lb-label">YOUR SCORE</p>
+              <p ref={lbScoreRef} className="lb-score-value">0</p>
             </div>
-            <div className="hud-actions">
-              <button className="hud-btn hud-btn-shield" onTouchEnd={() => tryShield(gsRef.current)}>SHLD</button>
-              <button
-                className="hud-btn hud-btn-fire"
-                onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
-                onTouchEnd={() => gsRef.current.keys.delete('z')}
-                onTouchCancel={() => gsRef.current.keys.delete('z')}
-              >FIRE</button>
-              <button className="hud-btn hud-btn-blast" onTouchEnd={() => tryBlast(gsRef.current)}>BLST</button>
+            <div ref={lbNameSectionRef} className="lb-name-section">
+              <p className="lb-label">ENTER CALLSIGN</p>
+              <input ref={lbInputRef} className="lb-input" maxLength={6} placeholder="PILOT" autoComplete="off" />
+              <button ref={lbSubmitRef} className="lb-submit-btn">SUBMIT SCORE</button>
             </div>
+            <div ref={lbBoardRef} className="lb-board" style={{ display: 'none' }}>
+              <p className="lb-label">TOP PILOTS</p>
+              <ol ref={lbListRef} className="lb-list" />
+            </div>
+            <button ref={lbRetryRef} className="lb-retry-btn">► PLAY AGAIN</button>
           </div>
           <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
             <p className="touch-group-label">Choose your route</p>
