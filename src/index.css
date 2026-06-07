@@ -29,10 +29,15 @@
   box-sizing: border-box;
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
-  min-width: 320px;
   min-height: 100vh;
+  max-width: 100%;
+  overflow-x: hidden;
   background:
     linear-gradient(180deg, rgba(0, 229, 255, 0.06), transparent 32rem),
     var(--bg);
@@ -1150,21 +1155,133 @@ button:disabled {
   text-shadow: 0 0 20px rgba(102, 242, 165, 0.4);
 }
 
-/* ── touch controls (arcade game) ── */
-.touch-controls {
+/* ── canvas wrapper (scopes HUD overlay positioning) ── */
+.canvas-wrap {
+  position: relative;
+  line-height: 0;
+  overflow: visible;
+}
+
+/* ── HUD overlay controls (touch only, lives inside the canvas) ── */
+.hud-controls {
   display: none;
-  width: min(420px, 95vw);
-  padding: 14px 4px 6px;
+  position: absolute;
+  bottom: -46px;
+  left: 0;
+  right: 0;
+  padding: 0 10px;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+.hud-move {
+  pointer-events: auto;
+  display: flex;
   gap: 10px;
 }
 
-.touch-group {
+.hud-btn-dir {
+  width: 52px;
+  height: 52px;
+  background: rgba(0, 229, 255, 0.07);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  border-radius: 50%;
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: 1.3rem;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 7px;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
 }
 
+.hud-btn-dir:active {
+  background: rgba(0, 229, 255, 0.22);
+  border-color: rgba(0, 229, 255, 0.8);
+}
+
+.hud-actions {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.hud-btn {
+  border-radius: 50%;
+  border: 1px solid;
+  font-family: var(--mono);
+  font-size: 0.54rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hud-btn-shield {
+  width: 46px;
+  height: 46px;
+  background: rgba(0, 229, 255, 0.07);
+  border-color: rgba(0, 229, 255, 0.38);
+  color: var(--cyan);
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+}
+
+.hud-btn-shield:active {
+  background: rgba(0, 229, 255, 0.22);
+  border-color: var(--cyan);
+}
+
+.hud-btn-blast {
+  width: 46px;
+  height: 46px;
+  background: rgba(247, 199, 106, 0.07);
+  border-color: rgba(247, 199, 106, 0.38);
+  color: var(--amber);
+  text-shadow: 0 0 8px rgba(247, 199, 106, 0.5);
+}
+
+.hud-btn-blast:active {
+  background: rgba(247, 199, 106, 0.22);
+  border-color: var(--amber);
+}
+
+.hud-btn-fire {
+  width: 58px;
+  height: 58px;
+  background: rgba(255, 79, 216, 0.16);
+  border: 2px solid var(--pink);
+  border-radius: 50%;
+  color: var(--pink);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 0 12px rgba(255, 79, 216, 0.8);
+  box-shadow: 0 0 18px rgba(255, 79, 216, 0.22), inset 0 0 10px rgba(255, 79, 216, 0.05);
+}
+
+.hud-btn-fire:active {
+  background: rgba(255, 79, 216, 0.34);
+  box-shadow: 0 0 8px rgba(255, 79, 216, 0.12), inset 0 0 6px rgba(255, 79, 216, 0.12);
+}
+
+/* ── briefing choice overlay (centered over canvas) ── */
 .touch-group-label {
   margin: 0;
   color: var(--muted);
@@ -1181,14 +1298,15 @@ button:disabled {
 }
 
 .touch-btn {
-  height: 62px;
-  min-width: 62px;
+  height: 52px;
+  min-width: 52px;
   border: 1px solid rgba(0, 229, 255, 0.38);
-  border-radius: 2px;
-  background: rgba(0, 229, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(0, 229, 255, 0.08);
   color: var(--cyan);
   font-family: var(--mono);
-  font-size: 1.4rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
   user-select: none;
   -webkit-user-select: none;
   display: flex;
@@ -1198,32 +1316,8 @@ button:disabled {
 }
 
 .touch-btn:active {
-  background: rgba(0, 229, 255, 0.28);
+  background: rgba(0, 229, 255, 0.24);
   border-color: var(--cyan);
-}
-
-.touch-btn-fire {
-  min-width: 84px;
-  height: 62px;
-  background: rgba(255, 79, 216, 0.16);
-  border: 2px solid rgba(255, 79, 216, 0.65);
-  color: var(--pink);
-  font-size: 0.9rem;
-  letter-spacing: 0.14em;
-  text-shadow: 0 0 14px rgba(255, 79, 216, 0.6);
-}
-
-.touch-btn-fire:active {
-  background: rgba(255, 79, 216, 0.32);
-}
-
-.touch-btn-ability {
-  min-width: 72px;
-  height: 62px;
-  background: rgba(0, 229, 255, 0.07);
-  border-color: rgba(0, 229, 255, 0.28);
-  font-size: 0.76rem;
-  letter-spacing: 0.1em;
 }
 
 .touch-btn-choice {
@@ -1242,41 +1336,39 @@ button:disabled {
 
 .touch-choice-overlay {
   display: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 12px 20px 14px;
-  margin: 6px auto 0;
-  background: rgba(4, 5, 14, 0.92);
-  border: 1px solid rgba(247, 199, 106, 0.42);
+  padding: 16px 24px 18px;
+  background: rgba(4, 5, 14, 0.94);
+  border: 1px solid rgba(247, 199, 106, 0.45);
   border-radius: 8px;
-}
-
-.touch-hint {
-  display: none;
-  margin: 2px 0 0;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  opacity: 0.55;
-  text-align: center;
+  z-index: 10;
 }
 
 @media (pointer: coarse) {
-  .touch-controls {
+  .hud-controls {
     display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-  }
-
-  .touch-hint {
-    display: block;
   }
 
   .game-hint {
     display: none;
+  }
+
+  .game-wrap {
+    gap: 0;
+    padding: 0;
+    justify-content: flex-start;
+    min-height: 100dvh;
+  }
+
+  .game-canvas {
+    max-width: 100%;
+    max-height: 100dvh;
   }
 
   .landing-controls {
