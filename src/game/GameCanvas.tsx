@@ -255,7 +255,8 @@ interface GS {
   txProfiles:    [PhysicsProfile, PhysicsProfile] | null;
   txChoiceTimer: number;
   missionKind:     'approach' | 'eliminate';
-  stationProgress: number; // 0-1, wave 1 approach only
+  stationProgress: number;
+  totalEnemies:    number;
   activeProfile:   PhysicsProfile;
 }
 
@@ -404,11 +405,13 @@ function newGame(
   lives   = 3,
   profile: PhysicsProfile = DEFAULT_PROFILE,
 ): GS {
+  const enemies = buildWave(wave, profile);
   return {
     phase: 'play', score, hi, lives, wave,
     px: W / 2, invT: 2, shootT: 0,
     waveT: 0, dieT: 0,
-    bullets: [], enemies: buildWave(wave, profile), sparks: [],
+    enemies, sparks: [],
+    bullets: [],
     stars: mkStars(), keys: new Set(), seq: 1000,
     ufo: null, ufoT: (15 + Math.random() * 8) * profile.ufoFreq,
     gravRocks: [mkRock(0, profile), mkRock(1, profile)],
@@ -420,6 +423,7 @@ function newGame(
     txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0,
     missionKind:     wave === 1 ? 'approach' : 'eliminate',
     stationProgress: 0,
+    totalEnemies:    enemies.length,
     activeProfile:   profile,
   };
 }
@@ -1186,11 +1190,14 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bool
   ctx.fillStyle = gs.blastCD  <= 0 ? C.green : C.muted;
   ctx.fillText(gs.blastCD  <= 0 ? '[C] BLAST'  : `[C] ${Math.ceil(gs.blastCD)}s`,  W - 8, 46);
 
-  // wave 1 approach: dock progress in HUD
-  if (gs.missionKind === 'approach' && (gs.phase === 'play' || gs.phase === 'die')) {
-    const pct = Math.round(gs.stationProgress * 100);
+  // mission progress in HUD
+  if (gs.phase === 'play' || gs.phase === 'die') {
+    const pct = gs.missionKind === 'approach'
+      ? Math.round(gs.stationProgress * 100)
+      : gs.totalEnemies > 0 ? Math.round((1 - gs.enemies.length / gs.totalEnemies) * 100) : 0;
+    const label = gs.missionKind === 'approach' ? 'DOCK' : 'ELIM';
     ctx.fillStyle = C.green;
-    ctx.fillText(`DOCK: ${pct}%`, W - 8, 58);
+    ctx.fillText(`${label}: ${pct}%`, W - 8, 58);
   }
 
   ctx.font      = "16px 'VT323', monospace";
@@ -1358,10 +1365,13 @@ export default function GameCanvas() {
 
       // sidebar progress bar (DOM, no React re-render)
       if (sidebarRef.current && progressFillRef.current) {
-        const show = g.missionKind === 'approach' && (g.phase === 'play' || g.phase === 'die');
+        const show = g.phase === 'play' || g.phase === 'die';
         sidebarRef.current.style.display = show ? 'flex' : 'none';
         if (show) {
-          progressFillRef.current.style.height = `${Math.round(g.stationProgress * 100)}%`;
+          const pct = g.missionKind === 'approach'
+            ? Math.round(g.stationProgress * 100)
+            : g.totalEnemies > 0 ? Math.round((1 - g.enemies.length / g.totalEnemies) * 100) : 0;
+          progressFillRef.current.style.height = `${pct}%`;
         }
       }
 
