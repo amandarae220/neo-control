@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { track } from '@vercel/analytics';
 import { supabase } from '../lib/supabase';
 import { submitScore, fetchTopScores } from '../lib/scores';
 
@@ -1328,8 +1329,11 @@ export default function GameCanvas() {
   const deskPctRef       = useRef<HTMLSpanElement>(null);
   const deskFillRef      = useRef<HTMLDivElement>(null);
   const deskLogRef       = useRef<HTMLUListElement>(null);
-  const navigate       = useNavigate();
-  const gsRef          = useRef<GS>(introGame());
+  const navigate         = useNavigate();
+  const gsRef            = useRef<GS>(introGame());
+  const trackedPhaseRef  = useRef<Phase>('brief');
+  const trackedWaveRef   = useRef(0);
+  const trackedAscentRef = useRef(false);
 
   useEffect(() => {
     const canvas  = canvasRef.current!;
@@ -1432,6 +1436,24 @@ export default function GameCanvas() {
       if (g.phase === 'play' || g.phase === 'die' || g.phase === 'brief') update(g, dt);
       else { tickStars(g, dt); tickSparks(g, dt); }
       render(ctx, g, now / 1000, isTouch);
+
+      // ── analytics: fire once per state transition ──────────────────────
+      const prevPhase = trackedPhaseRef.current;
+      if (g.phase === 'play' && prevPhase === 'brief' && trackedWaveRef.current === 0) {
+        track('game_start');
+      }
+      if (g.waveT > 0 && g.wave > trackedWaveRef.current) {
+        track('wave_clear', { wave: g.wave, score: g.score });
+        trackedWaveRef.current = g.wave;
+      }
+      if (g.dockAscent >= 1 && !trackedAscentRef.current) {
+        track('dock_success', { score: g.score });
+        trackedAscentRef.current = true;
+      }
+      if (g.phase === 'over' && prevPhase !== 'over') {
+        track('game_over', { wave: g.wave, score: g.score });
+      }
+      trackedPhaseRef.current = g.phase;
 
       // sidebar progress bar (DOM, no React re-render)
       if (sidebarRef.current && progressFillRef.current) {
