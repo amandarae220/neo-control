@@ -31,6 +31,7 @@ const EB_SPD = 150;      // enemy bullet speed px/s (down)
 const MAX_BULLETS    = 3;
 const DOCK_TOL       = 44;   // px from center counted as aligned
 const DOCK_HOLD_TIME = 2.2;  // seconds to hold alignment for successful dock
+const ASCENT_DURATION = 1.8; // seconds for rocket ascent animation
 
 
 /* ── palette ─────────────────────────────────────────────────────────── */
@@ -301,6 +302,7 @@ interface GS {
   stationProgress: number;
   dockSeq:         boolean;
   dockLock:        number;
+  dockAscent:      number;
   totalEnemies:    number;
   scoreLog:        ScoreEvent[];
   activeProfile:   PhysicsProfile;
@@ -474,6 +476,7 @@ function newGame(
     stationProgress: 0,
     dockSeq:         false,
     dockLock:        0,
+    dockAscent:      0,
     totalEnemies:    enemies.length,
     scoreLog:        [],
     activeProfile:   profile,
@@ -697,8 +700,9 @@ function tickPlanets(gs: GS, dt: number) {
 
 /* ── update ──────────────────────────────────────────────────────────── */
 function tickStars(gs: GS, dt: number) {
+  const speedMult = gs.dockSeq ? 0.22 : 1;
   gs.stars.forEach(s => {
-    s.y += (0.5 + s.s * 0.25) * dt * 30;
+    s.y += (0.5 + s.s * 0.25) * dt * 30 * speedMult;
     if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
   });
 }
@@ -820,8 +824,10 @@ function update(gs: GS, dt: number) {
 
   /* ── player move ── */
   gs.invT = Math.max(0, gs.invT - dt);
-  if (gs.keys.has('ArrowLeft')  || gs.keys.has('a')) gs.px = Math.max(14, gs.px - P_SPD * dt);
-  if (gs.keys.has('ArrowRight') || gs.keys.has('d')) gs.px = Math.min(W - 14, gs.px + P_SPD * dt);
+  if (gs.dockAscent <= 0) {
+    if (gs.keys.has('ArrowLeft')  || gs.keys.has('a')) gs.px = Math.max(14, gs.px - P_SPD * dt);
+    if (gs.keys.has('ArrowRight') || gs.keys.has('d')) gs.px = Math.min(W - 14, gs.px + P_SPD * dt);
+  }
 
   /* ── player shoot ── */
   gs.shootT = Math.max(0, gs.shootT - dt);
@@ -859,9 +865,9 @@ function update(gs: GS, dt: number) {
   gs.enemies = gs.enemies.filter(e => !killedEnemies.has(e.id));
   gs.bullets = gs.bullets.filter(b => !usedBullets.has(b.id));
 
-  // station approach: each kill advances docking progress
-  if (gs.missionKind === 'approach' && !gs.dockSeq && killedEnemies.size > 0) {
-    gs.stationProgress = Math.min(1, gs.stationProgress + killedEnemies.size * 0.015);
+  /* ── station approach: progress mirrors enemy clearing ── */
+  if (gs.missionKind === 'approach' && !gs.dockSeq && gs.totalEnemies > 0) {
+    gs.stationProgress = 1 - gs.enemies.length / gs.totalEnemies;
   }
 
   /* ── enemy bullets → player ── */
@@ -897,27 +903,33 @@ function update(gs: GS, dt: number) {
     }
   });
 
-  /* ── station approach: passive progress fill ── */
-  if (gs.missionKind === 'approach' && !gs.dockSeq) {
-    gs.stationProgress = Math.min(1, gs.stationProgress + 0.008 * dt);
+  /* ── docking sequence: trigger when all enemies cleared ── */
+  if (gs.missionKind === 'approach' && !gs.dockSeq && gs.enemies.length === 0) {
+    gs.dockSeq      = true;
+    gs.stationProgress = 1;
+    gs.bullets      = gs.bullets.filter(b => b.player);
+    gs.planets      = [];
+    gs.gravRocks    = [];
+    gs.ufo          = null;
+    gs.ufoT         = 999;
+    gs.spawnPlanetT = 999;
+    gs.spawnRockT   = 999;
   }
-
-  /* ── docking sequence ── */
-  if (gs.missionKind === 'approach' && !gs.dockSeq && gs.stationProgress >= 1) {
-    gs.dockSeq = true;
-    gs.bullets  = gs.bullets.filter(b => b.player);
-    gs.enemies  = [];
-  }
-  if (gs.dockSeq) {
+  if (gs.dockSeq && gs.dockAscent <= 0) {
     const aligned = Math.abs(gs.px - W / 2) <= DOCK_TOL;
     gs.dockLock = aligned
       ? Math.min(DOCK_HOLD_TIME, gs.dockLock + dt)
       : Math.max(0, gs.dockLock - dt * 1.5);
   }
+  /* ── dock ascent: rocket flies up to station ── */
+  if (gs.dockSeq && gs.dockLock >= DOCK_HOLD_TIME && gs.dockAscent < 1) {
+    gs.dockAscent = Math.min(1, gs.dockAscent + dt / ASCENT_DURATION);
+    gs.px += (W / 2 - gs.px) * Math.min(1, dt * 10);
+  }
 
   /* ── wave clear ── */
   const waveClear = gs.missionKind === 'approach'
-    ? gs.dockSeq && gs.dockLock >= DOCK_HOLD_TIME
+    ? gs.dockSeq && gs.dockAscent >= 1
     : gs.enemies.length === 0;
 
   if (waveClear && gs.waveT <= 0) {
@@ -928,9 +940,11 @@ function update(gs: GS, dt: number) {
     gs.waveT  = 2.5;
   }
 
-  tickUFO(gs, dt);
-  tickGravRocks(gs, dt);
-  tickPlanets(gs, dt);
+  if (!gs.dockSeq) {
+    tickUFO(gs, dt);
+    tickGravRocks(gs, dt);
+    tickPlanets(gs, dt);
+  }
   tickSparks(gs, dt); tickStars(gs, dt);
 }
 
@@ -1143,9 +1157,10 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   if (gs.phase !== 'die' || gs.dieT > 1.2) {
     const blink = gs.invT > 0 && Math.sin(t * 12) > 0;
     if (!blink) {
-      drawSpr(ctx, SPR.player, C.cyan, gs.px, PY);
-      if (Math.sin(t * 22) > 0)
-        drawSpr(ctx, SPR.thruster, C.pink, gs.px, PY + sprH(SPR.player) / 2 + PX, PX);
+      const playerY = gs.dockAscent > 0 ? PY - (PY - 45) * gs.dockAscent : PY;
+      drawSpr(ctx, SPR.player, C.cyan, gs.px, playerY);
+      if (gs.dockAscent > 0 || Math.sin(t * 22) > 0)
+        drawSpr(ctx, SPR.thruster, C.pink, gs.px, playerY + sprH(SPR.player) / 2 + PX, PX);
     }
   }
 
@@ -1157,8 +1172,8 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   });
   ctx.globalAlpha = 1;
 
-  // docking alignment overlay
-  if (gs.missionKind === 'approach' && gs.dockSeq) {
+  // docking alignment overlay (hidden once ascent begins)
+  if (gs.missionKind === 'approach' && gs.dockSeq && gs.dockAscent <= 0) {
     const cx      = W / 2;
     const aligned = Math.abs(gs.px - cx) <= DOCK_TOL;
     const lockPct = gs.dockLock / DOCK_HOLD_TIME;
@@ -1213,6 +1228,17 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     ctx.font      = "13px 'VT323', monospace";
     ctx.fillStyle = aligned ? C.green : C.muted;
     ctx.fillText('DOCK LOCK', cx, my - 4);
+    ctx.textAlign = 'left';
+  }
+
+  // ascent message
+  if (gs.missionKind === 'approach' && gs.dockAscent > 0 && gs.dockAscent < 1) {
+    ctx.font      = "22px 'VT323', monospace";
+    ctx.textAlign = 'center';
+    ctx.fillStyle = C.green;
+    ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 6);
+    ctx.fillText('DOCKING…', W / 2, PY - 30);
+    ctx.globalAlpha = 1;
     ctx.textAlign = 'left';
   }
 
