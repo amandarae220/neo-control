@@ -5,12 +5,12 @@ export default function LandingPage() {
 
   return (
     <div className="page-shell landing-shell">
-      <p className="eyebrow">Orbital Defense System · Est. 1979</p>
-      <h1>NEO Control</h1>
-      <p>Rocks inbound. Aliens inbound. Earth not optional.</p>
-      <p className="landing-controls">← → to move &nbsp; Z or SPACE to shoot &nbsp; ESC to retreat</p>
+      <p className="eyebrow">NEO Control · Incident Report Vol. I</p>
+      <h1>Space Cadet</h1>
+      <p>You are not qualified for this. The autopilot is broken.<br />You were the only one who picked up the phone.</p>
+      <p className="landing-controls">← → move &nbsp; Z shoot &nbsp; ESC bail out</p>
       <button className="primary-action compact" onClick={() => navigate("/game")}>
-        Insert Coin
+        Accept Mission
       </button>
     </div>
   );
