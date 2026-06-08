@@ -1113,17 +1113,17 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
     const bx1  = W / 2 - btnW - gap / 2;
     const bx2  = W / 2 + gap / 2;
     const by   = btnBottom - btnH;
-    ctx.fillStyle = 'rgba(0,229,255,0.10)';
+    ctx.fillStyle = 'rgba(247,199,106,0.10)';
     ctx.fillRect(bx1, by, btnW, btnH);
-    ctx.strokeStyle = C.cyan;
+    ctx.strokeStyle = C.amber;
     ctx.strokeRect(bx1, by, btnW, btnH);
-    ctx.fillStyle = C.cyan;
+    ctx.fillStyle = C.amber;
     ctx.fillText('[ 1 ]', bx1 + btnW / 2, by + 20);
-    ctx.fillStyle = 'rgba(255,79,216,0.10)';
+    ctx.fillStyle = 'rgba(247,199,106,0.10)';
     ctx.fillRect(bx2, by, btnW, btnH);
-    ctx.strokeStyle = C.pink;
+    ctx.strokeStyle = C.amber;
     ctx.strokeRect(bx2, by, btnW, btnH);
-    ctx.fillStyle = C.pink;
+    ctx.fillStyle = C.amber;
     ctx.fillText('[ 2 ]', bx2 + btnW / 2, by + 20);
 
   } else if (gs.txDone && gs.txHasChoice) {
