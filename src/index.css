@@ -1619,6 +1619,12 @@ button:disabled {
 }
 
 @media (pointer: coarse) {
+  .game-canvas {
+    image-rendering: auto;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
   .hud-controls {
     display: flex;
   }
