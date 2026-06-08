@@ -229,7 +229,7 @@ const TRANSMISSIONS: WaveBrief[] = [
 ];
 
 /* ── types ───────────────────────────────────────────────────────────── */
-type Phase  = 'play' | 'die' | 'over' | 'brief';
+type Phase  = 'play' | 'die' | 'over' | 'brief' | 'intro' | 'jump';
 type EK     = 0 | 1 | 2;          // 0 = rock · 1 = alien · 2 = boss
 type EMove  = 'drift' | 'sweep' | 'swoop' | 'chase';
 
@@ -300,6 +300,15 @@ interface GS {
   txProfiles:    [PhysicsProfile, PhysicsProfile] | null;
   txChoiceTimer: number;
   txScroll:      number;
+  paused:        boolean;
+  introT:              number;
+  jumpT:               number;
+  gravitySurgeTimer:   number;
+  gravitySurgeActive:  boolean;
+  gravitySurgeWarn:    boolean;
+  gtaDroneLeft:        boolean;
+  gtaDroneHP:          number;
+  gtaDroneShootT:      number;
   missionKind:     'approach' | 'eliminate';
   stationProgress: number;
   dockSeq:         boolean;
@@ -332,8 +341,15 @@ const SPR = {
   ],
 };
 
-const UFO_SPR  = [' ##### ', '#######', '#.#.#.#', '#######', ' ##### '];
-const GRAV_SPR = ['  ###  ', ' ##### ', '#######', '#######', ' ##### ', '  ###  '];
+const UFO_SPR      = [' ##### ', '#######', '#.#.#.#', '#######', ' ##### '];
+const GRAV_SPR     = ['  ###  ', ' ##### ', '#######', '#######', ' ##### ', '  ###  '];
+const GTA_DRONE_SPR = [
+  ' ##.## ',
+  '#######',
+  '##.#.##',
+  '#######',
+  ' ##.## ',
+];
 
 function drawSpr(
   ctx: CanvasRenderingContext2D,
@@ -473,7 +489,8 @@ function newGame(
     spawnRockT: 5 + Math.random() * 3,
     planets: [], spawnPlanetT: 6,
     txLines: [], txLine: 0, txCh: 0, txDone: false, txWait: 0,
-    txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0, txScroll: 0,
+    txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0, txScroll: 0, paused: false,
+    introT: 0, jumpT: 0, gravitySurgeTimer: 0, gravitySurgeActive: false, gravitySurgeWarn: false, gtaDroneLeft: false, gtaDroneHP: 3, gtaDroneShootT: 0,
     missionKind:     wave === 1 ? 'approach' : 'eliminate',
     stationProgress: 0,
     dockSeq:         false,
@@ -577,6 +594,7 @@ function tickGravRocks(gs: GS, dt: number) {
   });
   gs.bullets = gs.bullets.filter(b => !usedB.has(b.id));
 
+  const surgeMult = gs.gravitySurgeActive ? 3.5 : 1;
   gs.gravRocks = gs.gravRocks.filter(rock => {
     rock.x += rock.vx * dt; rock.y += rock.vy * dt;
     if (rock.x < -80 || rock.x > W + 80 || rock.y < -80 || rock.y > H + 80) return false;
@@ -590,7 +608,7 @@ function tickGravRocks(gs: GS, dt: number) {
       const dx = rock.x - b.x, dy = rock.y - b.y;
       const dist = Math.sqrt(dx * dx + dy * dy) || 1;
       if (dist < rock.radius) {
-        const f = rock.mass * (1 - dist / rock.radius) / dist;
+        const f = rock.mass * surgeMult * (1 - dist / rock.radius) / dist;
         b.vx += dx * f * dt; b.vy += dy * f * dt;
       }
     });
@@ -598,7 +616,7 @@ function tickGravRocks(gs: GS, dt: number) {
     const pdx = rock.x - gs.px, pdy = rock.y - PY;
     const pd  = Math.sqrt(pdx * pdx + pdy * pdy) || 1;
     if (pd < rock.radius) {
-      const f = rock.mass * 0.15 * (1 - pd / rock.radius) / pd;
+      const f = rock.mass * 0.15 * surgeMult * (1 - pd / rock.radius) / pd;
       gs.px += pdx * f * dt;
       gs.px  = Math.max(14, Math.min(W - 14, gs.px));
     }
@@ -726,6 +744,19 @@ function killPlayer(gs: GS) {
 
 
 function update(gs: GS, dt: number) {
+  /* ── intro cinematic ── */
+  if (gs.phase === 'intro') {
+    gs.introT += dt;
+    const speedMult = Math.max(1, 12 - 10 * (gs.introT / 2.5));
+    gs.stars.forEach(s => {
+      s.y += (0.5 + s.s * 0.25) * dt * 30 * speedMult;
+      if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
+    });
+    tickSparks(gs, dt);
+    if (gs.introT >= 2.5) gs.phase = 'play';
+    return;
+  }
+
   /* ── death pause ── */
   if (gs.phase === 'die') {
     gs.dieT -= dt;
@@ -737,10 +768,39 @@ function update(gs: GS, dt: number) {
     return;
   }
 
-  /* ── wave clear pause → brief ── */
+  /* ── wave clear pause → jump/brief ── */
   if (gs.waveT > 0) {
     gs.waveT -= dt;
     if (gs.waveT <= 0) {
+      if (gs.missionKind === 'eliminate') {
+        gs.phase = 'jump';
+        gs.jumpT = 0;
+        gs.px    = W / 2;
+      } else {
+        gs.phase = 'brief';
+        const idx   = Math.min(gs.wave - 1, TRANSMISSIONS.length - 1);
+        const brief = TRANSMISSIONS[idx];
+        gs.txLines      = brief.lines;
+        gs.txHasChoice  = !!brief.profiles;
+        gs.txProfiles   = brief.profiles ?? null;
+        gs.txChoiceTimer = 0;
+        gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0; gs.txScroll = 0;
+      }
+    }
+    tickStars(gs, dt); tickSparks(gs, dt); tickPlanets(gs, dt);
+    return;
+  }
+
+  /* ── hyperspace jump (eliminate wave exit) ── */
+  if (gs.phase === 'jump') {
+    gs.jumpT += dt;
+    gs.px += (W / 2 - gs.px) * Math.min(1, dt * 4);
+    gs.stars.forEach(s => {
+      s.y += (0.5 + s.s * 0.25) * dt * 30 * 14;
+      if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
+    });
+    tickSparks(gs, dt);
+    if (gs.jumpT >= 2.0) {
       gs.phase = 'brief';
       const idx   = Math.min(gs.wave - 1, TRANSMISSIONS.length - 1);
       const brief = TRANSMISSIONS[idx];
@@ -750,7 +810,6 @@ function update(gs: GS, dt: number) {
       gs.txChoiceTimer = 0;
       gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0; gs.txScroll = 0;
     }
-    tickStars(gs, dt); tickSparks(gs, dt); tickPlanets(gs, dt);
     return;
   }
 
@@ -930,6 +989,66 @@ function update(gs: GS, dt: number) {
   }
 
   if (!gs.dockSeq) {
+    if (gs.activeProfile.gravMass > 1.5) {
+      gs.gravitySurgeTimer += dt;
+      const st      = gs.gravitySurgeTimer;
+      const wasWarn = gs.gravitySurgeWarn;
+      gs.gravitySurgeWarn   = st >= SC && st < SC + SW;
+      gs.gravitySurgeActive = st >= SC + SW && st < SC + SW + SA;
+      if (gs.gravitySurgeWarn && !wasWarn) {
+        gs.gtaDroneLeft  = Math.random() > 0.5;
+        gs.gtaDroneHP    = 3;
+        gs.gtaDroneShootT = 1.2;
+      }
+      if (st >= SC + SW + SA) {
+        gs.gravitySurgeTimer  = 0;
+        gs.gravitySurgeActive = false;
+        gs.gravitySurgeWarn   = false;
+      }
+
+      // drone mechanics during active phase
+      if (gs.gravitySurgeActive && gs.gtaDroneHP > 0) {
+        const dx = droneCurrentX(gs);
+
+        // lateral gravity pull toward drone
+        gs.px += (dx - gs.px) * 0.28 * dt;
+        gs.px  = Math.max(14, Math.min(W - 14, gs.px));
+
+        // drone fires at player
+        gs.gtaDroneShootT -= dt;
+        if (gs.gtaDroneShootT <= 0 && gs.invT <= 0) {
+          const bx = dx, by = DRONE_Y + 10;
+          const ddx = gs.px - bx, ddy = PY - by;
+          const dd  = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+          gs.bullets.push({ id: gs.seq++, x: bx, y: by, vx: (ddx / dd) * 140, vy: (ddy / dd) * 140, player: false });
+          gs.gtaDroneShootT = 1.4 + Math.random() * 0.5;
+        }
+
+        // player bullets hit drone
+        const droneW = sprW(GTA_DRONE_SPR, PX + 1), droneH = sprH(GTA_DRONE_SPR, PX + 1);
+        const used   = new Set<number>();
+        for (const b of gs.bullets) {
+          if (!b.player || used.has(b.id)) continue;
+          if (hit(b.x, b.y, PX, PX * 3, dx, DRONE_Y, droneW, droneH)) {
+            used.add(b.id);
+            gs.gtaDroneHP--;
+            burst(gs, dx, DRONE_Y, C.amber, 6);
+            if (gs.gtaDroneHP <= 0) {
+              burst(gs, dx, DRONE_Y, C.amber, 14);
+              burst(gs, dx, DRONE_Y, C.red, 8);
+              const pts = Math.round(800 * gs.activeProfile.bonusMult);
+              gs.score += pts; gs.hi = Math.max(gs.hi, gs.score);
+              logScore(gs, 'GTA DRONE', pts);
+              gs.gravitySurgeActive = false;
+              gs.gravitySurgeWarn   = false;
+              gs.gravitySurgeTimer  = 0;
+            }
+            break;
+          }
+        }
+        gs.bullets = gs.bullets.filter(b => !used.has(b.id));
+      }
+    }
     tickUFO(gs, dt);
     tickGravRocks(gs, dt);
     tickPlanets(gs, dt);
@@ -1004,6 +1123,11 @@ function briefScrollBounds(gs: GS) {
   return { maxScroll, clipTop, clipH, arrowX, arrowY, arrowW, arrowH };
 }
 
+const SECTOR_NAMES = ['7-G', 'VELON-4', 'DELTA-9', 'KIRA BELT', 'VOID OUTPOST', 'DEEP SPACE'];
+function sectorName(wave: number): string {
+  return SECTOR_NAMES[Math.min(wave - 1, SECTOR_NAMES.length - 1)];
+}
+
 function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
   const bw = W - TX_PAD * 2;
   const bh = H - TX_TOP - 36;
@@ -1058,8 +1182,8 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
     if (text.length > 0) {
       let color = C.green;
       if      (text.startsWith('>>>'))  color = C.amber;
-      else if (text.startsWith('[1]'))  color = C.cyan;
-      else if (text.startsWith('[2]'))  color = C.pink;
+      else if (text.startsWith('[1]'))  color = C.amber;
+      else if (text.startsWith('[2]'))  color = C.amber;
       ctx.fillStyle = color;
       ctx.fillText(text, lx, lineY);
     }
@@ -1108,23 +1232,26 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
   ctx.textAlign = 'center';
   ctx.lineWidth = 1;
 
-  if (gs.txDone && gs.txHasChoice) {
+  if (gs.txDone && gs.txHasChoice && !isTouch) {
     const btnH = 28, btnW = 82, gap = 10;
     const bx1  = W / 2 - btnW - gap / 2;
     const bx2  = W / 2 + gap / 2;
     const by   = btnBottom - btnH;
-    ctx.fillStyle = 'rgba(0,229,255,0.10)';
+    ctx.fillStyle = 'rgba(247,199,106,0.10)';
     ctx.fillRect(bx1, by, btnW, btnH);
-    ctx.strokeStyle = C.cyan;
+    ctx.strokeStyle = C.amber;
     ctx.strokeRect(bx1, by, btnW, btnH);
-    ctx.fillStyle = C.cyan;
+    ctx.fillStyle = C.amber;
     ctx.fillText('[ 1 ]', bx1 + btnW / 2, by + 20);
-    ctx.fillStyle = 'rgba(255,79,216,0.10)';
+    ctx.fillStyle = 'rgba(247,199,106,0.10)';
     ctx.fillRect(bx2, by, btnW, btnH);
-    ctx.strokeStyle = C.pink;
+    ctx.strokeStyle = C.amber;
     ctx.strokeRect(bx2, by, btnW, btnH);
-    ctx.fillStyle = C.pink;
+    ctx.fillStyle = C.amber;
     ctx.fillText('[ 2 ]', bx2 + btnW / 2, by + 20);
+
+  } else if (gs.txDone && gs.txHasChoice) {
+    // touch: DOM overlay handles choice — draw nothing in footer
 
   } else if (gs.txDone) {
     const btnH = 28, btnW = 172;
@@ -1151,10 +1278,138 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
   ctx.textAlign = 'left';
 }
 
+/* ── GTA drone constants & position helper ───────────────────────────── */
+const SC = 22, SW = 3, SA = 4; // surge cycle, warn dur, active dur (seconds)
+const DRONE_Y     = Math.round(H * 0.27);
+const DRONE_HOVER = 58;
+
+function droneCurrentX(gs: GS): number {
+  const hoverX = gs.gtaDroneLeft ? DRONE_HOVER : W - DRONE_HOVER;
+  const offX   = gs.gtaDroneLeft ? -44 : W + 44;
+  const st     = gs.gravitySurgeTimer;
+  if (gs.gravitySurgeWarn) {
+    const p = Math.min(1, (st - SC) / SW);
+    return offX + (hoverX - offX) * (1 - Math.pow(1 - p, 3));
+  }
+  if (gs.gravitySurgeActive) {
+    const p = Math.min(1, (st - SC - SW) / SA);
+    if (p < 0.825) return hoverX;
+    return hoverX + (offX - hoverX) * Math.pow((p - 0.825) / 0.175, 2);
+  }
+  return offX;
+}
+
+/* ── GTA drone draw ──────────────────────────────────────────────────── */
+function drawGTADrone(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
+  if (!gs.gravitySurgeWarn && !gs.gravitySurgeActive) return;
+  if (gs.gravitySurgeActive && gs.gtaDroneHP <= 0) return;
+
+  const droneX = droneCurrentX(gs);
+
+  // expanding gravity rings (active phase only)
+  if (gs.gravitySurgeActive) {
+    const maxR = 100;
+    for (let i = 0; i < 3; i++) {
+      const phase  = ((t * 0.45) + i * 0.333) % 1.0;
+      const radius = phase * maxR;
+      const alpha  = (1 - phase) * 0.45;
+      ctx.strokeStyle = `rgba(247,199,106,${alpha.toFixed(3)})`;
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.arc(droneX, DRONE_Y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  // damage state — color shifts red as HP drops
+  const hp      = gs.gtaDroneHP;
+  const damaged = gs.gravitySurgeActive && hp < 3;
+  const color   = hp === 1 ? C.red : hp === 2 ? '#f7a832' : C.amber;
+  const flicker = damaged && Math.sin(t * (hp === 1 ? 18 : 10)) > 0;
+  ctx.globalAlpha = gs.gravitySurgeActive ? (flicker ? 0.45 : 0.92) : 0.65;
+  drawSpr(ctx, GTA_DRONE_SPR, flicker ? C.red : color, droneX, DRONE_Y, PX + 1);
+  ctx.globalAlpha = 1;
+
+  // HP pips (active phase)
+  if (gs.gravitySurgeActive) {
+    const pipW = 6, pipGap = 4;
+    const totalW = 3 * pipW + 2 * pipGap;
+    const pipX   = droneX - totalW / 2;
+    const pipY   = DRONE_Y - sprH(GTA_DRONE_SPR, PX + 1) / 2 - 8;
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = i < hp ? color : 'rgba(122,112,136,0.35)';
+      ctx.fillRect(Math.floor(pipX + i * (pipW + pipGap)), Math.floor(pipY), pipW, 3);
+    }
+  }
+
+  // label
+  ctx.textAlign   = 'center';
+  ctx.font        = "13px 'VT323', monospace";
+  ctx.fillStyle   = color;
+  ctx.globalAlpha = gs.gravitySurgeActive ? 0.88 : 0.55;
+  ctx.fillText('GTA-7', droneX, DRONE_Y + sprH(GTA_DRONE_SPR, PX + 1) / 2 + 11);
+  ctx.globalAlpha = 1;
+  ctx.textAlign   = 'left';
+}
+
 /* ── render ──────────────────────────────────────────────────────────── */
 function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, W, H);
+
+  if (gs.phase === 'intro') {
+    const progress    = Math.min(1, gs.introT / 2.5);
+    const streakFactor = 1 - progress;
+    gs.stars.forEach(({ x, y, s }) => {
+      const trailLen = Math.floor(streakFactor * 40 * s);
+      ctx.fillStyle  = s === 2 ? 'rgba(200,192,218,0.9)' : 'rgba(200,192,218,0.52)';
+      if (trailLen > 2) {
+        ctx.fillRect(Math.floor(x), Math.floor(y) - trailLen, s, trailLen + s);
+      } else {
+        ctx.fillRect(Math.floor(x), Math.floor(y), s, s);
+      }
+    });
+    if (progress > 0.45) {
+      const fadeIn      = Math.min(1, (progress - 0.45) / 0.3);
+      ctx.globalAlpha   = fadeIn;
+      ctx.textAlign     = 'center';
+      ctx.font          = "24px 'VT323', monospace";
+      ctx.fillStyle     = C.green;
+      ctx.fillText(`ENTERING SECTOR ${sectorName(gs.wave)}`, W / 2, H / 2 - 12);
+      ctx.font          = "15px 'VT323', monospace";
+      ctx.fillStyle     = C.muted;
+      ctx.fillText(`WAVE ${gs.wave}`, W / 2, H / 2 + 14);
+      ctx.globalAlpha   = 1;
+      ctx.textAlign     = 'left';
+    }
+    return;
+  }
+
+  if (gs.phase === 'jump') {
+    const progress = Math.min(1, gs.jumpT / 2.0);
+    gs.stars.forEach(({ x, y, s }) => {
+      const trailLen = s * 36;
+      ctx.fillStyle  = s === 2 ? 'rgba(200,192,218,0.9)' : 'rgba(200,192,218,0.52)';
+      ctx.fillRect(Math.floor(x), Math.floor(y) - trailLen, s, trailLen + s);
+    });
+    const jumpY = PY - progress * (PY + 50);
+    if (jumpY > -24) {
+      drawSpr(ctx, SPR.player, C.cyan, gs.px, jumpY);
+      drawSpr(ctx, SPR.thruster, C.pink, gs.px, jumpY + sprH(SPR.player) / 2 + PX, PX);
+      const trailH = Math.floor(progress * 80);
+      if (trailH > 0) {
+        ctx.globalAlpha = 0.25 + 0.2 * progress;
+        ctx.fillStyle   = C.pink;
+        ctx.fillRect(Math.floor(gs.px - 1), Math.floor(jumpY + sprH(SPR.player) / 2 + PX * 2), 2, trailH);
+        ctx.globalAlpha = 1;
+      }
+    }
+    if (progress > 0.7) {
+      ctx.fillStyle = `rgba(7,6,14,${((progress - 0.7) / 0.3).toFixed(3)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    return;
+  }
 
   gs.stars.forEach(({ x, y, s }) => {
     ctx.fillStyle = s === 2 ? 'rgba(200,192,218,0.9)' : 'rgba(200,192,218,0.42)';
@@ -1164,6 +1419,8 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   gs.planets.forEach(planet => drawPlanet(ctx, planet));
 
   if (gs.phase === 'brief') { drawBrief(ctx, gs, t, isTouch); return; }
+
+  drawGTADrone(ctx, gs, t);
 
   // gravity rocks
   gs.gravRocks.forEach(rock => {
@@ -1308,6 +1565,35 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   }
 
   drawHUD(ctx, gs);
+
+  if (gs.gravitySurgeActive || gs.gravitySurgeWarn) {
+    const pulse   = 0.65 + 0.35 * Math.sin(t * (gs.gravitySurgeActive ? 10 : 4));
+    ctx.textAlign = 'center';
+    ctx.font      = "20px 'VT323', monospace";
+    ctx.fillStyle = C.amber;
+    ctx.globalAlpha = pulse;
+    ctx.fillText(gs.gravitySurgeActive ? '⚠ GRAVITY ANCHOR ACTIVE' : '⚠ GTA DRONE DETECTED', W / 2, 54);
+    if (gs.gravitySurgeActive) {
+      ctx.globalAlpha = 0.04;
+      ctx.fillStyle   = '#f7961e';
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign   = 'left';
+  }
+
+  if (gs.paused) {
+    ctx.fillStyle = 'rgba(7,6,14,0.78)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    ctx.font      = "32px 'VT323', monospace";
+    ctx.fillStyle = C.green;
+    ctx.fillText('PAUSED', W / 2, H / 2 - 8);
+    ctx.font      = "15px 'VT323', monospace";
+    ctx.fillStyle = C.muted;
+    ctx.fillText(isTouch ? '▶ TO RESUME' : 'P TO RESUME', W / 2, H / 2 + 16);
+    ctx.textAlign = 'left';
+  }
 }
 
 function drawHUD(ctx: CanvasRenderingContext2D, gs: GS) {
@@ -1357,6 +1643,40 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS) {
 
 }
 
+/* ── cheat codes ─────────────────────────────────────────────────────── */
+function processCheat(gs: GS, raw: string): string {
+  const code = raw.trim().toUpperCase();
+  if (gs.phase !== 'play') return 'PLAY FIRST';
+  switch (code) {
+    case '1UP':
+      if (gs.lives >= 9) return 'ALREADY MAXED';
+      gs.lives = Math.min(9, gs.lives + 1);
+      return '+1 LIFE';
+    case 'MAXLIVES':
+      gs.lives = 9;
+      return 'LIVES: 9';
+    case 'SKIPWAVE':
+    case 'NEXTWAVE':
+    case 'ENDWAVE':
+      gs.enemies = [];
+      if (gs.missionKind === 'approach') {
+        gs.dockSeq   = true;
+        gs.dockLock  = DOCK_HOLD_TIME;
+        gs.dockAscent = 1;
+      }
+      return 'WAVE SKIPPED';
+    case 'GODMODE':
+      gs.invT = 30;
+      return 'INVINCIBLE 30s';
+    case 'BIGPOINTS':
+      gs.score += 10000;
+      gs.hi = Math.max(gs.hi, gs.score);
+      return '+10,000 PTS';
+    default:
+      return 'UNKNOWN CODE';
+  }
+}
+
 /* ── component ───────────────────────────────────────────────────────── */
 export default function GameCanvas() {
   const canvasRef        = useRef<HTMLCanvasElement>(null);
@@ -1387,6 +1707,12 @@ export default function GameCanvas() {
   const trackedPhaseRef  = useRef<Phase>('brief');
   const trackedWaveRef   = useRef(0);
   const trackedAscentRef = useRef(false);
+  const pauseBtnRef      = useRef<HTMLButtonElement>(null);
+  const settingsBtnRef   = useRef<HTMLButtonElement>(null);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const cheatSectionRef  = useRef<HTMLDivElement>(null);
+  const cheatInputRef    = useRef<HTMLInputElement>(null);
+  const cheatStatusRef   = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     const canvas  = canvasRef.current!;
@@ -1403,12 +1729,16 @@ export default function GameCanvas() {
 
     const onDown = (e: KeyboardEvent) => {
       if (document.activeElement === lbInputRef.current) return;
+      if (document.activeElement === cheatInputRef.current) return;
       e.preventDefault();
       gsRef.current.keys.add(e.key);
       if (e.key === 'Escape') navigate('/');
 
       if ((e.key === ' ' || e.key === 'Enter') && gsRef.current.phase === 'over')
         gsRef.current = newGame(1, 0, gsRef.current.hi, 3);
+
+      if (e.key === 'p' && gsRef.current.phase === 'play')
+        gsRef.current.paused = !gsRef.current.paused;
 
       if ((e.key === ' ' || e.key === 'Enter') && gsRef.current.phase === 'brief') {
         const gs = gsRef.current;
@@ -1417,8 +1747,15 @@ export default function GameCanvas() {
           gs.txCh   = gs.txLines[gs.txLine].length;
           gs.txDone = true;
         } else if (!gs.txHasChoice) {
-          if (gs.txIsIntro) gs.phase = 'play';
-          else Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile));
+          if (gs.txIsIntro) {
+            gs.phase  = 'intro';
+            gs.introT = 0;
+          } else {
+            const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile);
+            ng.phase  = 'intro';
+            ng.introT = 0;
+            Object.assign(gs, ng);
+          }
         }
       }
 
@@ -1426,7 +1763,10 @@ export default function GameCanvas() {
         const gs = gsRef.current;
         if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
           const profile = gs.txProfiles[e.key === '1' ? 0 : 1];
-          Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, profile));
+          const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, profile);
+          ng.phase  = 'intro';
+          ng.introT = 0;
+          Object.assign(gs, ng);
         }
       }
 
@@ -1502,6 +1842,40 @@ export default function GameCanvas() {
     };
     canvas.addEventListener('click', handleBriefClick);
 
+    // ── settings panel ───────────────────────────────────────────────────
+    const settingsEl    = settingsBtnRef.current!;
+    const settingPanel  = settingsPanelRef.current!;
+    const cheatSection  = cheatSectionRef.current!;
+    const cheatInput    = cheatInputRef.current!;
+    const cheatStatus   = cheatStatusRef.current!;
+
+    const toggleSettings = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const open = settingPanel.style.display !== 'none';
+      settingPanel.style.display = open ? 'none' : 'flex';
+      if (open) cheatSection.style.display = 'none';
+    };
+    settingsEl.addEventListener('pointerdown', toggleSettings);
+
+    const handleCheatKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') submitCheat();
+    };
+    const submitCheat = () => {
+      const result = processCheat(gsRef.current, cheatInput.value);
+      cheatStatus.textContent = result;
+      cheatInput.value = '';
+    };
+    cheatInput.addEventListener('keydown', handleCheatKey);
+
+    const pauseEl = pauseBtnRef.current!;
+    const handlePauseDown = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (gsRef.current.phase === 'play') gsRef.current.paused = !gsRef.current.paused;
+    };
+    pauseEl.addEventListener('pointerdown', handlePauseDown);
+
     let last    = performance.now();
     let raf     = 0;
     let mounted = true;
@@ -1509,13 +1883,13 @@ export default function GameCanvas() {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
       const g = gsRef.current;
-      if (g.phase === 'play' || g.phase === 'die' || g.phase === 'brief') update(g, dt);
-      else { tickStars(g, dt); tickSparks(g, dt); }
+      if (!g.paused && (g.phase === 'play' || g.phase === 'die' || g.phase === 'brief' || g.phase === 'intro' || g.phase === 'jump')) update(g, dt);
+      else if (!g.paused) { tickStars(g, dt); tickSparks(g, dt); }
       render(ctx, g, now / 1000, isTouch);
 
       // ── analytics: fire once per state transition ──────────────────────
       const prevPhase = trackedPhaseRef.current;
-      if (g.phase === 'play' && prevPhase === 'brief' && trackedWaveRef.current === 0) {
+      if (g.phase === 'play' && (prevPhase === 'brief' || prevPhase === 'intro') && trackedWaveRef.current === 0) {
         track('game_start');
       }
       if (g.waveT > 0 && g.wave > trackedWaveRef.current) {
@@ -1544,7 +1918,7 @@ export default function GameCanvas() {
       }
 
       // desktop panels (DOM, no React re-render)
-      const playing = g.phase === 'play' || g.phase === 'die' || g.phase === 'brief' || g.phase === 'over';
+      const playing = g.phase === 'play' || g.phase === 'die' || g.phase === 'brief' || g.phase === 'intro' || g.phase === 'jump' || g.phase === 'over';
       if (deskScoreRef.current) deskScoreRef.current.textContent = g.score.toLocaleString();
       if (deskHiRef.current)    deskHiRef.current.textContent    = g.hi.toLocaleString();
       if (deskWaveRef.current)  deskWaveRef.current.textContent  = String(g.wave);
@@ -1569,6 +1943,20 @@ export default function GameCanvas() {
       // HUD controls — touch only, visible during play only
       if (isTouch && hudControlsRef.current) {
         hudControlsRef.current.style.display = g.phase === 'play' ? 'flex' : 'none';
+      }
+
+      // pause button — visible during play on all devices
+      if (pauseBtnRef.current) {
+        pauseBtnRef.current.style.display = g.phase === 'play' ? 'flex' : 'none';
+        pauseBtnRef.current.textContent   = g.paused ? '▶' : '⏸';
+      }
+
+      // settings button — visible during play; close panel when leaving play
+      if (settingsBtnRef.current) {
+        settingsBtnRef.current.style.display = g.phase === 'play' ? 'flex' : 'none';
+      }
+      if (settingsPanelRef.current && g.phase !== 'play') {
+        settingsPanelRef.current.style.display = 'none';
       }
 
       // briefing choice overlay — touch only, shown only when at bottom of scrollable content
@@ -1616,6 +2004,9 @@ export default function GameCanvas() {
       retryEl.removeEventListener('click', handleRetry);
       randomEl.removeEventListener('click', handleRandomize);
       canvas.removeEventListener('click', handleBriefClick);
+      pauseEl.removeEventListener('pointerdown', handlePauseDown);
+      settingsEl.removeEventListener('pointerdown', toggleSettings);
+      cheatInput.removeEventListener('keydown', handleCheatKey);
     };
   }, [navigate]);
 
@@ -1649,6 +2040,7 @@ export default function GameCanvas() {
             className="game-canvas"
             onTouchEnd={() => {
               const gs = gsRef.current;
+              if (gs.paused) return;
               if (gs.phase === 'brief') {
                 const { maxScroll } = briefScrollBounds(gs);
                 const atBottom = maxScroll <= 0 || gs.txScroll >= maxScroll - 1;
@@ -1661,8 +2053,15 @@ export default function GameCanvas() {
                   gs.txCh   = gs.txLines[gs.txLine].length;
                   gs.txDone = true;
                 } else if (!gs.txHasChoice) {
-                  if (gs.txIsIntro) gs.phase = 'play';
-                  else Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile));
+                  if (gs.txIsIntro) {
+                    gs.phase  = 'intro';
+                    gs.introT = 0;
+                  } else {
+                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile);
+                    ng.phase  = 'intro';
+                    ng.introT = 0;
+                    Object.assign(gs, ng);
+                  }
                 }
                 return;
               }
@@ -1710,15 +2109,69 @@ export default function GameCanvas() {
             </div>
             <button ref={lbRetryRef} className="lb-retry-btn">► PLAY AGAIN</button>
           </div>
+          <button
+            ref={pauseBtnRef}
+            className="pause-btn"
+            style={{ display: 'none' }}
+            aria-label="Pause"
+          >⏸</button>
+
+          <button
+            ref={settingsBtnRef}
+            className="settings-btn"
+            style={{ display: 'none' }}
+            aria-label="Settings"
+          >⚙</button>
+
+          <div ref={settingsPanelRef} className="settings-panel" style={{ display: 'none' }}>
+            <p className="settings-title">— SETTINGS —</p>
+            <button
+              className="settings-item"
+              onClick={() => {
+                if (!cheatSectionRef.current) return;
+                const open = cheatSectionRef.current.style.display !== 'none';
+                cheatSectionRef.current.style.display = open ? 'none' : 'flex';
+                if (!open && cheatInputRef.current) cheatInputRef.current.focus();
+              }}
+            >CHEAT CODES</button>
+            <div ref={cheatSectionRef} className="cheat-section" style={{ display: 'none' }}>
+              <div className="cheat-row">
+                <input
+                  ref={cheatInputRef}
+                  className="cheat-input"
+                  placeholder="ENTER CODE"
+                  maxLength={20}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button
+                  className="cheat-go-btn"
+                  onClick={() => {
+                    const result = processCheat(gsRef.current, cheatInputRef.current?.value ?? '');
+                    if (cheatStatusRef.current) cheatStatusRef.current.textContent = result;
+                    if (cheatInputRef.current) cheatInputRef.current.value = '';
+                  }}
+                >GO</button>
+              </div>
+              <p ref={cheatStatusRef} className="cheat-status"></p>
+            </div>
+            <button
+              className="settings-item settings-close"
+              onClick={() => { if (settingsPanelRef.current) settingsPanelRef.current.style.display = 'none'; }}
+            >CLOSE</button>
+          </div>
+
           <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
-            <p className="touch-group-label">Choose your route</p>
             <div className="touch-row">
               <button
                 className="touch-btn touch-btn-choice"
                 onTouchEnd={() => {
                   const gs = gsRef.current;
                   if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                    Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0]));
+                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0]);
+                    ng.phase  = 'intro';
+                    ng.introT = 0;
+                    Object.assign(gs, ng);
                   }
                 }}
               >[1]</button>
@@ -1727,7 +2180,10 @@ export default function GameCanvas() {
                 onTouchEnd={() => {
                   const gs = gsRef.current;
                   if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                    Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1]));
+                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1]);
+                    ng.phase  = 'intro';
+                    ng.introT = 0;
+                    Object.assign(gs, ng);
                   }
                 }}
               >[2]</button>
