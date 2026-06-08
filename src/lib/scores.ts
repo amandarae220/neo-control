@@ -11,7 +11,7 @@ export interface Score {
 export async function submitScore(name: string, score: number, wave: number): Promise<void> {
   if (!supabase) return;
   await supabase.from('scores').insert({
-    name: name.toUpperCase().trim().slice(0, 6) || 'PILOT',
+    name: name.toUpperCase().trim().slice(0, 12) || 'PILOT',
     score,
     wave,
   });

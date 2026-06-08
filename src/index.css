@@ -1388,19 +1388,43 @@ button:disabled {
   gap: 8px;
 }
 
+.lb-callsign-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .lb-input {
   background: rgba(0, 229, 255, 0.06);
   border: 1px solid rgba(0, 229, 255, 0.4);
   color: var(--cyan);
   font-family: var(--mono);
-  font-size: 1.6rem;
-  letter-spacing: 0.3em;
+  font-size: 1.3rem;
+  letter-spacing: 0.18em;
   text-align: center;
   text-transform: uppercase;
-  padding: 6px 14px;
-  width: 160px;
+  padding: 6px 10px;
+  width: 170px;
   border-radius: 2px;
   outline: none;
+}
+
+.lb-random-btn {
+  background: rgba(0, 229, 255, 0.06);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  color: var(--cyan);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 6px 9px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  flex-shrink: 0;
+}
+
+.lb-random-btn:hover {
+  background: rgba(0, 229, 255, 0.14);
+  border-color: var(--cyan);
 }
 
 .lb-input::placeholder {
@@ -1575,5 +1599,184 @@ button:disabled {
   .mission-topbar {
     align-items: start;
     flex-direction: column;
+  }
+}
+
+/* ── desktop game panels ─────────────────────────────────────────────── */
+.desk-panel {
+  display: none;
+}
+
+@media (pointer: fine) and (min-width: 700px) {
+  .game-hint {
+    display: none;
+  }
+
+  .station-sidebar {
+    display: none !important;
+  }
+
+  .game-row {
+    gap: 20px;
+    align-items: center;
+  }
+
+  .desk-panel {
+    display: flex;
+    flex-direction: column;
+    width: 160px;
+    height: 560px;
+    padding: 18px 14px;
+    box-sizing: border-box;
+    background: rgba(7, 6, 14, 0.9);
+    border: 1px solid rgba(102, 242, 165, 0.14);
+    font-family: 'VT323', monospace;
+    gap: 0;
+  }
+
+  .desk-panel-title {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(102, 242, 165, 0.45);
+    margin: 0 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(102, 242, 165, 0.1);
+  }
+
+  .desk-stat {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 16px;
+  }
+
+  .desk-stat-label {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(102, 242, 165, 0.4);
+    margin-bottom: 2px;
+  }
+
+  .desk-stat-value {
+    font-size: 26px;
+    color: #e8e0ff;
+    line-height: 1;
+  }
+
+  .desk-stat-score {
+    color: #00e5ff;
+  }
+
+  /* right panel */
+  .desk-mission-block {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+
+  .desk-mission-kind {
+    font-size: 13px;
+    color: #66f2a5;
+    margin-bottom: 10px;
+    display: block;
+  }
+
+  .desk-progress-track {
+    width: 100%;
+    height: 8px;
+    background: rgba(102, 242, 165, 0.08);
+    border: 1px solid rgba(102, 242, 165, 0.18);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+
+  .desk-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(to right, #66f2a5, rgba(102, 242, 165, 0.6));
+    box-shadow: 2px 0 8px rgba(102, 242, 165, 0.5);
+    transition: width 0.12s linear;
+  }
+
+  .desk-progress-pct {
+    font-size: 20px;
+    color: #66f2a5;
+    margin-bottom: 0;
+  }
+
+  .desk-divider {
+    width: 100%;
+    height: 1px;
+    background: rgba(102, 242, 165, 0.1);
+    margin: 18px 0;
+  }
+
+  .desk-controls-block {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .desk-controls-block .desk-panel-title {
+    margin-bottom: 10px;
+  }
+
+  .desk-key-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .desk-key {
+    font-family: 'VT323', monospace;
+    font-size: 13px;
+    background: rgba(102, 242, 165, 0.07);
+    border: 1px solid rgba(102, 242, 165, 0.22);
+    color: #00e5ff;
+    padding: 1px 6px;
+    border-radius: 2px;
+    min-width: 36px;
+    text-align: center;
+    display: inline-block;
+  }
+
+  .desk-key-label {
+    font-size: 13px;
+    color: rgba(232, 224, 255, 0.55);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .desk-log-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .desk-log-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .desk-log-label {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(232, 224, 255, 0.55);
+  }
+
+  .desk-log-pts {
+    font-size: 18px;
+    color: #00e5ff;
+    line-height: 1;
   }
 }

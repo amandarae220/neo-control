@@ -3,6 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { submitScore, fetchTopScores } from '../lib/scores';
 
+/* ── callsign generator ──────────────────────────────────────────────── */
+const CALL_PREFIX = [
+  'NOVA', 'STAR', 'DARK', 'VOID', 'IRON', 'NEON', 'FLUX',
+  'SOLAR', 'COMET', 'ORBIT', 'LUNAR', 'CYBER', 'ULTRA', 'STORM',
+];
+const CALL_SUFFIX = [
+  'WOLF', 'HAWK', 'ACE', 'FOX', 'REX',
+  'VEGA', 'VIPER', 'GHOST', 'BLADE', 'LANCE',
+];
+function randomCallsign(): string {
+  const p = CALL_PREFIX[Math.floor(Math.random() * CALL_PREFIX.length)];
+  const s = CALL_SUFFIX[Math.floor(Math.random() * CALL_SUFFIX.length)];
+  return `${p} ${s}`;
+}
+
 /* ── canvas dimensions ───────────────────────────────────────────────── */
 const W = 420;
 const H = 560;
@@ -47,40 +62,46 @@ interface WaveBrief {
 }
 
 const INTRO_TRANSMISSION: string[] = [
-  '>>> EARTH NEO CONTROL  //  EYES ONLY',
+  '>>> NEO CONTROL  //  INCOMING TRANSMISSION',
   '',
-  'ATTENTION: PILOT VECTOR-7.',
+  'CADET. THIS IS NEO CONTROL.',
   '',
-  'ZORGON FLEET DETECTED IN HIGH ORBIT.',
-  'ASTEROID FIELD IS NOT NATURAL —',
-  'CONFIRMED HOSTILE FORMATION.',
+  'TODAY: ROUTINE SUPPLY RUN TO NEO-7.',
+  'THE AUTOPILOT IS BROKEN, WHICH IS',
+  'THE ONLY REASON WE CALLED YOU.',
   '',
-  'MISSION: BREAK THROUGH AND DOCK AT',
-  'STATION NEO-7. RETRIEVE THE INTEL.',
-  'DO NOT LET THEM DESTROY THE STATION.',
+  'THE STATION IS DIRECTLY AHEAD.',
+  'CAN\'T MISS IT. SERIOUSLY THOUGH,',
+  'PLEASE DO NOT HIT IT. DAMAGE DONE',
+  'TO THE DOCK WILL BE DEDUCTED FROM',
+  'YOUR PAY.',
   '',
-  'GOOD LUCK. YOU\'LL NEED IT.',
-  '                    — GEN. TORRES',
+  'GOOD LUCK. MISSION CONTROL OUT.',
 ];
 
 const TRANSMISSIONS: WaveBrief[] = [
   { // wave 1 → wave 2: route choice
     lines: [
-      '>>> EARTH NEO CONTROL  //  PRIORITY 1',
+      '>>> NEO CONTROL  //  PRIORITY ADVISORY',
       '',
-      'DOCK CONFIRMED. INTEL RECEIVED.',
-      'ZORGON FLEET IS REFORMING.',
+      'SPACE CADET.',
       '',
-      'TWO APPROACH VECTORS AVAILABLE.',
-      'CHOOSE YOUR ROUTE, PILOT:',
+      'YOU\'VE ENTERED SECTOR 7-G WITHOUT',
+      'TRANSIT CLEARANCE. THOSE DRONES',
+      'WERE TRAFFIC ENFORCEMENT — YOU',
+      'DESTROYED ELEVEN. IT\'S ALL ON',
+      'SECURITY FOOTAGE. THEY\'VE ESCALATED',
+      'TO THE GALACTIC TRANSIT AUTHORITY.',
       '',
-      '[1] GRAVITY FIELD SECTOR',
+      'TWO ESCAPE VECTORS. CHOOSE:',
+      '',
+      '[1] GRAVITY FIELD APPROACH',
       '    DENSE ROCKS. STRONG PULL.',
-      '    HEAVY ENEMY DIVES.',
+      '    LOSE THEM IN THE ASTEROID WAKE.',
       '',
-      '[2] HIGH-VELOCITY SECTOR',
+      '[2] HIGH-VELOCITY CORRIDOR',
       '    FAST ROCKS. LIGHTER GRAVITY.',
-      '    FEWER DIVES.  +30% BONUS.',
+      '    FASTER. ALSO INSANE.  +30% BONUS.',
     ],
     profiles: [
       { gravMass: 2.2, rockSpeed: 0.7,  diveFreq: 0.5, ufoFreq: 1,   bonusMult: 1   },
@@ -89,35 +110,52 @@ const TRANSMISSIONS: WaveBrief[] = [
   },
   { // wave 2 → wave 3
     lines: [
-      '>>> [INTERCEPTED]  ZORGON FLEET CMD',
+      '>>> NEO CONTROL  //  REROUTING',
       '',
-      'VRAX TO DIVISION II:',
+      'CADET.',
       '',
-      'THE EARTH PILOT DESTROYED OUR',
-      'FORWARD UNITS. UNACCEPTABLE.',
-      'ACCELERATE THE EXTRACTION.',
-      'THE NEUTRONIUM MUST NOT REACH THEM.',
+      'DUE TO THE SECTOR 7-G INCIDENT,',
+      'YOUR STANDARD RETURN PATH IS NOW',
+      'A CRIME SCENE.',
       '',
-      '>>> [HQ ANNOTATION]  THEY\'RE MINING.',
+      'WE\'RE ROUTING YOU THROUGH THE',
+      'VELON-4 CORRIDOR. VELON-4 IS A',
+      'LARGE PLANET. IT HAS SIGNIFICANT',
+      'GRAVITY.',
+      '',
+      'THE TEXTBOOK RESPONSE IS A HOHMANN',
+      'TRANSFER ORBIT. YOU DIDN\'T STUDY',
+      'FOR THAT EXAM.',
+      '',
+      'JUST DON\'T FLY INTO IT.',
+      'THE ROCKS WILL DO THE REST.',
+      '',
+      'P.S. YOUR GTA FILE HAS BEEN UPGRADED',
+      'FROM "INCIDENT" TO "ONGOING MATTER."',
     ],
   },
   { // wave 3 → wave 4: tactical choice
     lines: [
-      '>>> [INTERCEPTED]  ADMIRAL KETH',
+      '>>> NEO CONTROL  //  INTEL UPDATE',
       '',
-      'VRAX HAS FAILED. I AM ASSUMING',
-      'DIRECT COMMAND OF THE OPERATION.',
+      'CADET.',
       '',
-      'TWO TACTICAL OPTIONS AVAILABLE.',
-      'CHOOSE YOUR ENGAGEMENT, PILOT:',
+      'FORMAL COMPLAINTS RECEIVED FROM',
+      'THE GTA, TWO MERCENARY GUILDS,',
+      'AND THE VELON NEIGHBORHOOD COALITION.',
+      'THEY\'VE POOLED RESOURCES.',
       '',
-      '[1] ENGAGE VRAX DIRECTLY',
+      'SOMEONE HERE IS RUNNING A BETTING',
+      'POOL ON YOUR SURVIVAL. NOT SAYING',
+      'WHO. CURRENT ODDS: 3 TO 1. AGAINST.',
+      '',
+      '[1] DIRECT INTERCEPT',
       '    HIGH UFO PRESENCE. MORE RISK.',
-      '    DOUBLE FLEET KILLS.  +50% BONUS.',
+      '    SHOW THEM YOU MEAN IT.  +50%.',
       '',
-      '[2] ACCEPT COVERT INTEL',
-      '    REDUCED DIVE PRESSURE.',
-      '    STEALTH APPROACH. RECON DATA.',
+      '[2] STEALTH CORRIDOR',
+      '    REDUCED ENEMY PRESENCE.',
+      '    QUIETER. SUSPICIOUS.',
     ],
     profiles: [
       { gravMass: 1,   rockSpeed: 1,    diveFreq: 0.5, ufoFreq: 2.5, bonusMult: 1.5 },
@@ -126,35 +164,44 @@ const TRANSMISSIONS: WaveBrief[] = [
   },
   { // wave 4 → wave 5
     lines: [
-      '>>> EARTH NEO CONTROL  //  URGENT',
+      '>>> NEO CONTROL  //  MEDIA ALERT',
       '',
-      'DEEP SCANS SHOW A CORE VESSEL IN',
-      'THE FIELD. KETH\'S FLAGSHIP.',
-      'IF IT ESCAPES WITH THE NEUTRONIUM,',
-      'EARTH IS FINISHED.',
+      'CADET. YOU\'RE ON THE NEWS.',
+      '',
+      'HEADLINE: "UNIDENTIFIED SHIP',
+      'TERRORIZES OUTER SECTORS —',
+      'BELIEVED TO BE MALFUNCTIONING."',
+      '',
+      'THEY DON\'T KNOW YOU\'RE A PERSON.',
+      'I HAVE CHOSEN NOT TO CORRECT THEM.',
       '',
       'BACKUP CANNOT REACH YOU IN TIME.',
-      'IT\'S YOU, PILOT. ONLY YOU.',
-      '                    — TORRES',
+      'PLEASE CONTINUE MALFUNCTIONING.',
+      '              — MISSION CONTROL',
     ],
   },
   { // wave 5 → wave 6: final choice
     lines: [
-      '>>> [INTERCEPTED]  KETH PERSONAL LOG',
+      '>>> [OPEN CHANNEL]  NEO CONTROL',
       '',
-      'THIS HUMAN PILOT IS... REMARKABLE.',
-      'THEY FIGHT LIKE NOTHING LEFT TO LOSE.',
+      'CADET.',
       '',
-      'THEIR WEAPON LOCKS ON THE CANNON.',
-      'CHOOSE YOUR FINAL APPROACH:',
+      'YOU KNOW WHAT YOU\'RE DOING BY NOW.',
+      'OR YOU DON\'T AND IT\'S WORKING.',
+      'SAME THING.',
       '',
-      '[1] DESTROY THE GRAVITY CANNON',
-      '    EXTREME ROCK DENSITY.',
-      '    HIGH RISK.  +100% BONUS SCORE.',
+      'THE GUILDS ARE ROUTING FOR YOU.',
+      'THE POOL IS IN YOUR FAVOR.',
       '',
-      '[2] HACK THE CANNON SYSTEMS',
+      'FINAL APPROACH. YOUR CALL:',
+      '',
+      '[1] FORCE THROUGH',
+      '    EXTREME CONDITIONS.',
+      '    MAXIMUM RISK.  +100% BONUS.',
+      '',
+      '[2] WORK THE ANGLES',
       '    NEAR-ZERO GRAVITY. PRECISION.',
-      '    SAFER. SURGICAL. STANDARD REWARD.',
+      '    STILL INSANE. STANDARD REWARD.',
     ],
     profiles: [
       { gravMass: 3.5,  rockSpeed: 1,  diveFreq: 1, ufoFreq: 1, bonusMult: 2.0 },
@@ -163,16 +210,16 @@ const TRANSMISSIONS: WaveBrief[] = [
   },
   { // wave 6+
     lines: [
-      '>>> [INTERCEPTED]  UNKNOWN ORIGIN',
+      '>>> [OPEN CHANNEL]  UNKNOWN ORIGIN',
       '',
-      'TO THE EARTH PILOT:',
+      'TO THE SPACE CADET:',
       '',
-      'YOU CANNOT STOP THE TIDE.',
-      'WE HAVE WATCHED YOUR WORLD',
-      'FOR CENTURIES. YOU ARE ONLY',
-      'NOW NOTICING US.',
+      'WE FILED THE COMPLAINT.',
+      'WE WITHDREW THE COMPLAINT.',
+      'WE ARE NOW ROUTING FOR YOU.',
       '',
-      '>>> [HQ]  KEEP FIGHTING. WE SEE YOU.',
+      '>>> [NEO CONTROL]',
+      'SAME. KEEP GOING.',
     ],
   },
 ];
@@ -206,7 +253,6 @@ interface UFO {
 interface GravRock {
   id: number; x: number; y: number; vx: number; vy: number;
   mass: number; radius: number;
-  deflected: boolean; deflectT: number;
 }
 
 interface Planet {
@@ -240,11 +286,6 @@ interface GS {
   spawnRockT:   number;
   planets:      Planet[];
   spawnPlanetT: number;
-  deflectMsg: number;
-  shieldT:    number;
-  shieldCD:   number;
-  blastCD:    number;
-  blastRing:  number;
   txLines:    string[];
   txLine:     number;
   txCh:       number;
@@ -257,7 +298,14 @@ interface GS {
   missionKind:     'approach' | 'eliminate';
   stationProgress: number;
   totalEnemies:    number;
+  scoreLog:        ScoreEvent[];
   activeProfile:   PhysicsProfile;
+}
+
+interface ScoreEvent {
+  label: string;
+  pts:   number;
+  age:   number;
 }
 
 /* ── pixel-art sprites ───────────────────────────────────────────────── */
@@ -394,7 +442,6 @@ function mkRock(id: number, profile: PhysicsProfile = DEFAULT_PROFILE): GravRock
     id, x, y,
     vx: (dx / d) * spd, vy: (dy / d) * spd,
     mass: 120 * profile.gravMass, radius: 75,
-    deflected: false, deflectT: 0,
   };
 }
 
@@ -417,15 +464,19 @@ function newGame(
     gravRocks: [mkRock(0, profile), mkRock(1, profile)],
     spawnRockT: 5 + Math.random() * 3,
     planets: [], spawnPlanetT: 6,
-    deflectMsg: 0,
-    shieldT: 0, shieldCD: 0, blastCD: 0, blastRing: 0,
     txLines: [], txLine: 0, txCh: 0, txDone: false, txWait: 0,
     txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0,
     missionKind:     wave === 1 ? 'approach' : 'eliminate',
     stationProgress: 0,
     totalEnemies:    enemies.length,
+    scoreLog:        [],
     activeProfile:   profile,
   };
+}
+
+function logScore(gs: GS, label: string, pts: number) {
+  gs.scoreLog.unshift({ label, pts, age: 0 });
+  if (gs.scoreLog.length > 8) gs.scoreLog.length = 8;
 }
 
 function introGame(): GS {
@@ -473,8 +524,10 @@ function tickUFO(gs: GS, dt: number) {
   for (const b of gs.bullets) {
     if (!b.player) continue;
     if (hit(b.x, b.y, PX, PX * 3, u.x, u.y, uW, uH)) {
-      gs.score += Math.round(u.pts * gs.activeProfile.bonusMult);
+      const uPts = Math.round(u.pts * gs.activeProfile.bonusMult);
+      gs.score += uPts;
       gs.hi    = Math.max(gs.hi, gs.score);
+      logScore(gs, 'UFO', uPts);
       burst(gs, u.x, u.y, C.pink, 14);
       gs.ufo = null;
       gs.ufoT = (18 + Math.random() * 7) * gs.activeProfile.ufoFreq;
@@ -505,8 +558,6 @@ function tickGravRocks(gs: GS, dt: number) {
         rock.vy += (b.vy / bd) * 190;
         const spd = Math.sqrt(rock.vx * rock.vx + rock.vy * rock.vy);
         if (spd > 270) { rock.vx = (rock.vx / spd) * 270; rock.vy = (rock.vy / spd) * 270; }
-        rock.deflected = true; rock.deflectT = 2.5;
-        gs.deflectMsg  = 2.0;
         usedB.add(b.id);
         burst(gs, rock.x, rock.y, C.cyan, 10);
         break;
@@ -516,26 +567,10 @@ function tickGravRocks(gs: GS, dt: number) {
   gs.bullets = gs.bullets.filter(b => !usedB.has(b.id));
 
   gs.gravRocks = gs.gravRocks.filter(rock => {
-    if (rock.deflectT > 0) rock.deflectT -= dt; else rock.deflected = false;
-
     rock.x += rock.vx * dt; rock.y += rock.vy * dt;
     if (rock.x < -80 || rock.x > W + 80 || rock.y < -80 || rock.y > H + 80) return false;
 
-    if (rock.deflected) {
-      const toKill = new Set<number>();
-      gs.enemies.forEach(e => {
-        const sp = eSpr(e.kind);
-        if (hit(rock.x, rock.y, rW, rH, e.x, e.y, sprW(sp), sprH(sp))) {
-          burst(gs, e.x, e.y, eColor(e.kind, e.row), 10);
-          gs.score += Math.round(e.pts * 1.5 * gs.activeProfile.bonusMult);
-          gs.hi    = Math.max(gs.hi, gs.score);
-          toKill.add(e.id);
-        }
-      });
-      gs.enemies = gs.enemies.filter(e => !toKill.has(e.id));
-    }
-
-    if (!rock.deflected && gs.invT <= 0) {
+    if (gs.invT <= 0) {
       const pw = sprW(SPR.player), ph = sprH(SPR.player);
       if (hit(rock.x, rock.y, rW, rH, gs.px, PY, pw, ph)) killPlayer(gs);
     }
@@ -653,33 +688,6 @@ function tickPlanets(gs: GS, dt: number) {
   });
 }
 
-/* ── player abilities ────────────────────────────────────────────────── */
-function tryShield(gs: GS) {
-  if (gs.phase !== 'play' || gs.shieldCD > 0) return;
-  gs.shieldT  = 0.55;
-  gs.shieldCD = 5.0;
-}
-
-function tryBlast(gs: GS) {
-  if (gs.phase !== 'play' || gs.blastCD > 0) return;
-  const BLAST_R = 130;
-  let didHit = false;
-  gs.gravRocks.forEach(rock => {
-    const dx = rock.x - gs.px, dy = rock.y - PY;
-    if (Math.sqrt(dx * dx + dy * dy) < BLAST_R) {
-      const lateral = rock.x < gs.px ? -75 : 75;
-      rock.vx = lateral; rock.vy = -230;
-      const spd = Math.sqrt(rock.vx * rock.vx + rock.vy * rock.vy);
-      if (spd > 270) { rock.vx = (rock.vx / spd) * 270; rock.vy = (rock.vy / spd) * 270; }
-      rock.deflected = true; rock.deflectT = 2.5;
-      didHit = true;
-    }
-  });
-  if (didHit) gs.deflectMsg = 2.0;
-  burst(gs, gs.px, PY, C.green, 14);
-  gs.blastCD   = 7.0;
-  gs.blastRing = 1;
-}
 
 /* ── update ──────────────────────────────────────────────────────────── */
 function tickStars(gs: GS, dt: number) {
@@ -766,6 +774,8 @@ function update(gs: GS, dt: number) {
     return;
   }
 
+  gs.scoreLog.forEach(e => { e.age += dt; });
+
   /* ── individual enemy movement ── */
   gs.enemies.forEach(e => {
     e.t += dt;
@@ -831,8 +841,10 @@ function update(gs: GS, dt: number) {
       const sp = eSpr(e.kind);
       if (hit(b.x, b.y, PX, PX * 3, e.x, e.y, sprW(sp), sprH(sp))) {
         burst(gs, e.x, e.y, eColor(e.kind, e.row));
-        gs.score += Math.round((e.y > H * 0.55 ? e.dpts : e.pts) * gs.activeProfile.bonusMult);
+        const awarded = Math.round((e.y > H * 0.55 ? e.dpts : e.pts) * gs.activeProfile.bonusMult);
+        gs.score += awarded;
         gs.hi = Math.max(gs.hi, gs.score);
+        logScore(gs, e.kind === 2 ? 'BOSS' : e.kind === 1 ? 'FIGHTER' : 'DRONE', awarded);
         killedEnemies.add(e.id);
         usedBullets.add(b.id);
       }
@@ -890,35 +902,11 @@ function update(gs: GS, dt: number) {
     : gs.enemies.length === 0;
 
   if (waveClear && gs.waveT <= 0) {
-    gs.score += Math.round(gs.wave * 500 * gs.activeProfile.bonusMult);
+    const wBonus = Math.round(gs.wave * 500 * gs.activeProfile.bonusMult);
+    gs.score += wBonus;
     gs.hi     = Math.max(gs.hi, gs.score);
+    logScore(gs, 'WAVE BONUS', wBonus);
     gs.waveT  = 2.5;
-  }
-
-  if (gs.deflectMsg > 0) gs.deflectMsg -= dt;
-  gs.shieldCD = Math.max(0, gs.shieldCD - dt);
-  gs.blastCD  = Math.max(0, gs.blastCD  - dt);
-
-  if (gs.shieldT > 0) {
-    gs.shieldT -= dt;
-    const SR = 42;
-    gs.gravRocks.forEach(rock => {
-      const dx = rock.x - gs.px, dy = rock.y - PY;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      if (dist < SR) {
-        const spd = Math.max(Math.sqrt(rock.vx * rock.vx + rock.vy * rock.vy), 165);
-        rock.vx = (dx / dist) * spd; rock.vy = (dy / dist) * spd;
-        rock.x  = gs.px + (dx / dist) * (SR + 2);
-        rock.y  = PY    + (dy / dist) * (SR + 2);
-        rock.deflected = true; rock.deflectT = 2.2;
-        gs.deflectMsg  = 2.0;
-      }
-    });
-  }
-
-  if (gs.blastRing > 0) {
-    gs.blastRing += 260 * dt;
-    if (gs.blastRing > 130) gs.blastRing = 0;
   }
 
   tickUFO(gs, dt);
@@ -997,7 +985,7 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
     ? '── INCOMING TRANSMISSION ──'
     : gs.txHasChoice
       ? '── COMMAND DECISION REQUIRED ──'
-      : '── INTERCEPTED TRANSMISSION ──';
+      : '── INCOMING TRANSMISSION ──';
 
   ctx.font      = "15px 'VT323', monospace";
   ctx.textAlign = 'center';
@@ -1081,21 +1069,11 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
 
   // gravity rocks
   gs.gravRocks.forEach(rock => {
-    const deflFlash = rock.deflected && Math.sin(t * 14) > 0;
-    const ringAlpha = rock.deflected ? 0.4 + 0.3 * Math.sin(t * 9) : 0.10 + 0.06 * Math.sin(t * 1.8);
-    const ringRGB   = rock.deflected ? '0,229,255' : '247,199,106';
-    ctx.strokeStyle = `rgba(${ringRGB},${ringAlpha})`;
-    ctx.lineWidth   = rock.deflected ? 1.5 : 1;
+    const ringAlpha = 0.10 + 0.06 * Math.sin(t * 1.8);
+    ctx.strokeStyle = `rgba(247,199,106,${ringAlpha})`;
+    ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.arc(rock.x, rock.y, rock.radius, 0, Math.PI * 2); ctx.stroke();
-    const rockColor = rock.deflected ? (deflFlash ? C.white : C.cyan) : C.amber;
-    drawSpr(ctx, GRAV_SPR, rockColor, rock.x, rock.y, PX + 1);
-    if (!rock.deflected && rock.x > 0 && rock.x < W && rock.y > 0 && rock.y < H) {
-      ctx.fillStyle = `rgba(0,229,255,${0.45 + 0.35 * Math.sin(t * 5)})`;
-      ctx.font      = "11px 'VT323', monospace";
-      ctx.textAlign = 'center';
-      ctx.fillText('[ DEFLECT ]', rock.x, rock.y - (sprH(GRAV_SPR, PX + 1) / 2) - 5);
-      ctx.textAlign = 'left';
-    }
+    drawSpr(ctx, GRAV_SPR, C.amber, rock.x, rock.y, PX + 1);
   });
 
   // UFO
@@ -1133,22 +1111,6 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     ctx.fillRect(Math.floor(b.x - bw / 2), Math.floor(b.y - bh / 2), bw, bh);
   });
 
-  // shield bubble
-  if (gs.shieldT > 0) {
-    ctx.strokeStyle = `rgba(0,229,255,${Math.min(1, gs.shieldT * 2.2)})`;
-    ctx.lineWidth   = 2;
-    ctx.beginPath(); ctx.arc(gs.px, PY, 42, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle   = `rgba(0,229,255,${gs.shieldT * 0.12})`;
-    ctx.beginPath(); ctx.arc(gs.px, PY, 42, 0, Math.PI * 2); ctx.fill();
-  }
-
-  // blast ring
-  if (gs.blastRing > 0) {
-    ctx.strokeStyle = `rgba(102,242,165,${1 - gs.blastRing / 130})`;
-    ctx.lineWidth   = 2;
-    ctx.beginPath(); ctx.arc(gs.px, PY, gs.blastRing, 0, Math.PI * 2); ctx.stroke();
-  }
-
   // player
   if (gs.phase !== 'die' || gs.dieT > 1.2) {
     const blink = gs.invT > 0 && Math.sin(t * 12) > 0;
@@ -1167,10 +1129,10 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   });
   ctx.globalAlpha = 1;
 
-  drawHUD(ctx, gs, t, isTouch);
+  drawHUD(ctx, gs);
 }
 
-function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
+function drawHUD(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.font      = "16px 'VT323', monospace";
   ctx.textAlign = 'left';
 
@@ -1184,20 +1146,15 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bool
   ctx.textAlign = 'right';
   ctx.fillStyle = C.muted; ctx.fillText(`WAVE ${gs.wave}`, W - 8, 18);
 
-  ctx.font      = "13px 'VT323', monospace";
-  ctx.fillStyle = gs.shieldCD <= 0 ? C.cyan  : C.muted;
-  ctx.fillText(gs.shieldCD <= 0 ? '[X] SHIELD' : `[X] ${Math.ceil(gs.shieldCD)}s`, W - 8, 34);
-  ctx.fillStyle = gs.blastCD  <= 0 ? C.green : C.muted;
-  ctx.fillText(gs.blastCD  <= 0 ? '[C] BLAST'  : `[C] ${Math.ceil(gs.blastCD)}s`,  W - 8, 46);
-
   // mission progress in HUD
   if (gs.phase === 'play' || gs.phase === 'die') {
+    ctx.font = "13px 'VT323', monospace";
     const pct = gs.missionKind === 'approach'
       ? Math.round(gs.stationProgress * 100)
       : gs.totalEnemies > 0 ? Math.round((1 - gs.enemies.length / gs.totalEnemies) * 100) : 0;
     const label = gs.missionKind === 'approach' ? 'DOCK' : 'ELIM';
     ctx.fillStyle = C.green;
-    ctx.fillText(`${label}: ${pct}%`, W - 8, 58);
+    ctx.fillText(`${label}: ${pct}%`, W - 8, 34);
   }
 
   ctx.font      = "16px 'VT323', monospace";
@@ -1220,30 +1177,6 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bool
     ctx.textAlign = 'left';
   }
 
-  // deflect banner
-  if (gs.deflectMsg > 0) {
-    ctx.font      = "26px 'VT323', monospace";
-    ctx.textAlign = 'center';
-    ctx.fillStyle = C.cyan;
-    ctx.globalAlpha = Math.min(1, gs.deflectMsg);
-    ctx.fillText('DEFLECT!', W / 2, PY - 55);
-    ctx.globalAlpha = 1;
-    ctx.textAlign = 'left';
-  }
-
-  // game over
-  if (gs.phase === 'over') {
-    ctx.font      = "32px 'VT323', monospace";
-    ctx.textAlign = 'center';
-    ctx.fillStyle = C.red;   ctx.fillText('GAME OVER', W / 2, H / 2 - 24);
-    ctx.font      = "18px 'VT323', monospace";
-    ctx.fillStyle = C.white; ctx.fillText(`SCORE  ${gs.score}`, W / 2, H / 2 + 8);
-    if (Math.sin(t * 3) > 0) {
-      ctx.fillStyle = C.muted;
-      ctx.fillText(isTouch ? 'TAP  TO  RETRY' : 'SPACE  TO  RETRY', W / 2, H / 2 + 34);
-    }
-    ctx.textAlign = 'left';
-  }
 }
 
 /* ── component ───────────────────────────────────────────────────────── */
@@ -1261,7 +1194,16 @@ export default function GameCanvas() {
   const lbListRef        = useRef<HTMLOListElement>(null);
   const lbSubmitRef      = useRef<HTMLButtonElement>(null);
   const lbRetryRef       = useRef<HTMLButtonElement>(null);
+  const lbRandomRef      = useRef<HTMLButtonElement>(null);
   const lbCapturedRef    = useRef({ score: 0, wave: 1 });
+  // desktop panel refs
+  const deskScoreRef     = useRef<HTMLSpanElement>(null);
+  const deskHiRef        = useRef<HTMLSpanElement>(null);
+  const deskWaveRef      = useRef<HTMLSpanElement>(null);
+  const deskMissionRef   = useRef<HTMLSpanElement>(null);
+  const deskPctRef       = useRef<HTMLSpanElement>(null);
+  const deskFillRef      = useRef<HTMLDivElement>(null);
+  const deskLogRef       = useRef<HTMLUListElement>(null);
   const navigate       = useNavigate();
   const gsRef          = useRef<GS>(introGame());
 
@@ -1301,8 +1243,6 @@ export default function GameCanvas() {
         }
       }
 
-      if (e.key === 'x' || e.key === 'X') tryShield(gsRef.current);
-      if (e.key === 'c' || e.key === 'C') tryBlast(gsRef.current);
     };
     const onUp = (e: KeyboardEvent) => gsRef.current.keys.delete(e.key);
 
@@ -1316,7 +1256,7 @@ export default function GameCanvas() {
       submitBtn.disabled = true;
       submitBtn.textContent = 'SUBMITTING…';
 
-      const name  = (lbInputRef.current?.value.trim().toUpperCase().slice(0, 6)) || 'PILOT';
+      const name  = (lbInputRef.current?.value.trim().toUpperCase().slice(0, 12)) || 'PILOT';
       const { score, wave } = lbCapturedRef.current;
 
       await submitScore(name, score, wave);
@@ -1345,13 +1285,19 @@ export default function GameCanvas() {
       gsRef.current = newGame(1, 0, gsRef.current.hi, 3);
     };
 
+    const handleRandomize = () => {
+      if (lbInputRef.current) lbInputRef.current.value = randomCallsign();
+    };
+
     const submitEl = lbSubmitRef.current!;
     const inputEl  = lbInputRef.current!;
     const retryEl  = lbRetryRef.current!;
+    const randomEl = lbRandomRef.current!;
 
     submitEl.addEventListener('click', handleLbSubmit);
     inputEl.addEventListener('keydown', handleLbKey);
     retryEl.addEventListener('click', handleRetry);
+    randomEl.addEventListener('click', handleRandomize);
 
     let last = performance.now();
     let raf  = 0;
@@ -1375,6 +1321,29 @@ export default function GameCanvas() {
         }
       }
 
+      // desktop panels (DOM, no React re-render)
+      const playing = g.phase === 'play' || g.phase === 'die' || g.phase === 'brief' || g.phase === 'over';
+      if (deskScoreRef.current) deskScoreRef.current.textContent = g.score.toLocaleString();
+      if (deskHiRef.current)    deskHiRef.current.textContent    = g.hi.toLocaleString();
+      if (deskWaveRef.current)  deskWaveRef.current.textContent  = String(g.wave);
+      if (playing && deskMissionRef.current && deskPctRef.current && deskFillRef.current) {
+        const pct = g.missionKind === 'approach'
+          ? Math.round(g.stationProgress * 100)
+          : g.totalEnemies > 0 ? Math.round((1 - g.enemies.length / g.totalEnemies) * 100) : 0;
+        deskMissionRef.current.textContent = g.missionKind === 'approach' ? 'DOCK' : 'ELIMINATE';
+        deskPctRef.current.textContent     = `${pct}%`;
+        deskFillRef.current.style.width    = `${pct}%`;
+      }
+      if (deskLogRef.current) {
+        deskLogRef.current.innerHTML = g.scoreLog.map(e => {
+          const alpha = Math.max(0.2, 1 - e.age / 14).toFixed(2);
+          return `<li class="desk-log-item" style="opacity:${alpha}">
+            <span class="desk-log-label">${e.label}</span>
+            <span class="desk-log-pts">+${e.pts.toLocaleString()}</span>
+          </li>`;
+        }).join('');
+      }
+
       // HUD controls — touch only, visible during play only
       if (isTouch && hudControlsRef.current) {
         hudControlsRef.current.style.display = g.phase === 'play' ? 'flex' : 'none';
@@ -1391,6 +1360,7 @@ export default function GameCanvas() {
         if (g.phase === 'over' && lbOverlayRef.current.style.display === 'none') {
           lbCapturedRef.current = { score: g.score, wave: g.wave };
           if (lbScoreRef.current) lbScoreRef.current.textContent = g.score.toLocaleString();
+          if (lbInputRef.current) lbInputRef.current.value = randomCallsign();
           if (!supabase && lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'none';
           lbOverlayRef.current.style.display = 'flex';
         }
@@ -1417,12 +1387,33 @@ export default function GameCanvas() {
       submitEl.removeEventListener('click', handleLbSubmit);
       inputEl.removeEventListener('keydown', handleLbKey);
       retryEl.removeEventListener('click', handleRetry);
+      randomEl.removeEventListener('click', handleRandomize);
     };
   }, [navigate]);
 
   return (
     <div className="game-wrap">
       <div className="game-row">
+        {/* ── desktop left panel ── */}
+        <aside className="desk-panel desk-panel-left" aria-label="Pilot status">
+          <p className="desk-panel-title">PILOT STATUS</p>
+          <div className="desk-stat">
+            <span className="desk-stat-label">SCORE</span>
+            <span ref={deskScoreRef} className="desk-stat-value desk-stat-score">0</span>
+          </div>
+          <div className="desk-stat">
+            <span className="desk-stat-label">HI-SCORE</span>
+            <span ref={deskHiRef} className="desk-stat-value">0</span>
+          </div>
+          <div className="desk-stat">
+            <span className="desk-stat-label">WAVE</span>
+            <span ref={deskWaveRef} className="desk-stat-value">1</span>
+          </div>
+          <div className="desk-divider" />
+          <p className="desk-panel-title">SCORE LOG</p>
+          <ul ref={deskLogRef} className="desk-log-list" />
+        </aside>
+
         <div className="canvas-wrap">
           <canvas
             ref={canvasRef}
@@ -1462,7 +1453,10 @@ export default function GameCanvas() {
             </div>
             <div ref={lbNameSectionRef} className="lb-name-section">
               <p className="lb-label">ENTER CALLSIGN</p>
-              <input ref={lbInputRef} className="lb-input" maxLength={6} placeholder="PILOT" autoComplete="off" />
+              <div className="lb-callsign-row">
+                <input ref={lbInputRef} className="lb-input" maxLength={12} placeholder="NOVA WOLF" autoComplete="off" spellCheck={false} />
+                <button ref={lbRandomRef} className="lb-random-btn" type="button" title="Generate random callsign">↻</button>
+              </div>
               <button ref={lbSubmitRef} className="lb-submit-btn">SUBMIT SCORE</button>
             </div>
             <div ref={lbBoardRef} className="lb-board" style={{ display: 'none' }}>
@@ -1502,8 +1496,27 @@ export default function GameCanvas() {
           </div>
           <div className="sidebar-sub">DOCK</div>
         </div>
+
+        {/* ── desktop right panel ── */}
+        <aside className="desk-panel desk-panel-right" aria-label="Mission and controls">
+          <div className="desk-mission-block">
+            <p className="desk-panel-title">MISSION</p>
+            <span ref={deskMissionRef} className="desk-stat-label desk-mission-kind">—</span>
+            <div className="desk-progress-track">
+              <div ref={deskFillRef} className="desk-progress-fill" style={{ width: '0%' }} />
+            </div>
+            <span ref={deskPctRef} className="desk-progress-pct">0%</span>
+          </div>
+          <div className="desk-divider" />
+          <div className="desk-controls-block">
+            <p className="desk-panel-title">CONTROLS</p>
+            <div className="desk-key-row"><kbd className="desk-key">← →</kbd><span className="desk-key-label">MOVE</span></div>
+            <div className="desk-key-row"><kbd className="desk-key">Z</kbd><span className="desk-key-label">SHOOT</span></div>
+            <div className="desk-key-row"><kbd className="desk-key">ESC</kbd><span className="desk-key-label">MENU</span></div>
+          </div>
+        </aside>
       </div>
-      <p className="game-hint">← → MOVE &nbsp;&nbsp; Z SHOOT &nbsp;&nbsp; X SHIELD &nbsp;&nbsp; C BLAST &nbsp;&nbsp; ESC MENU</p>
+      <p className="game-hint">← → MOVE &nbsp;&nbsp; Z SHOOT &nbsp;&nbsp; ESC MENU</p>
     </div>
   );
 }
