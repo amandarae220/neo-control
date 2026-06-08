@@ -1427,8 +1427,9 @@ export default function GameCanvas() {
     retryEl.addEventListener('click', handleRetry);
     randomEl.addEventListener('click', handleRandomize);
 
-    let last = performance.now();
-    let raf  = 0;
+    let last    = performance.now();
+    let raf     = 0;
+    let mounted = true;
     const tick = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
@@ -1524,9 +1525,12 @@ export default function GameCanvas() {
 
       raf = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
+    document.fonts.ready.then(() => {
+      if (mounted) raf = requestAnimationFrame(tick);
+    });
 
     return () => {
+      mounted = false;
       cancelAnimationFrame(raf);
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup',   onUp);
