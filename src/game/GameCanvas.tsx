@@ -300,6 +300,7 @@ interface GS {
   txProfiles:    [PhysicsProfile, PhysicsProfile] | null;
   txChoiceTimer: number;
   txScroll:      number;
+  paused:        boolean;
   missionKind:     'approach' | 'eliminate';
   stationProgress: number;
   dockSeq:         boolean;
@@ -473,7 +474,7 @@ function newGame(
     spawnRockT: 5 + Math.random() * 3,
     planets: [], spawnPlanetT: 6,
     txLines: [], txLine: 0, txCh: 0, txDone: false, txWait: 0,
-    txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0, txScroll: 0,
+    txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0, txScroll: 0, paused: false,
     missionKind:     wave === 1 ? 'approach' : 'eliminate',
     stationProgress: 0,
     dockSeq:         false,
@@ -1311,6 +1312,19 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   }
 
   drawHUD(ctx, gs);
+
+  if (gs.paused) {
+    ctx.fillStyle = 'rgba(7,6,14,0.78)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    ctx.font      = "32px 'VT323', monospace";
+    ctx.fillStyle = C.green;
+    ctx.fillText('PAUSED', W / 2, H / 2 - 8);
+    ctx.font      = "15px 'VT323', monospace";
+    ctx.fillStyle = C.muted;
+    ctx.fillText(isTouch ? '▶ TO RESUME' : 'P TO RESUME', W / 2, H / 2 + 16);
+    ctx.textAlign = 'left';
+  }
 }
 
 function drawHUD(ctx: CanvasRenderingContext2D, gs: GS) {
@@ -1390,6 +1404,7 @@ export default function GameCanvas() {
   const trackedPhaseRef  = useRef<Phase>('brief');
   const trackedWaveRef   = useRef(0);
   const trackedAscentRef = useRef(false);
+  const pauseBtnRef      = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const canvas  = canvasRef.current!;
@@ -1412,6 +1427,9 @@ export default function GameCanvas() {
 
       if ((e.key === ' ' || e.key === 'Enter') && gsRef.current.phase === 'over')
         gsRef.current = newGame(1, 0, gsRef.current.hi, 3);
+
+      if (e.key === 'p' && gsRef.current.phase === 'play')
+        gsRef.current.paused = !gsRef.current.paused;
 
       if ((e.key === ' ' || e.key === 'Enter') && gsRef.current.phase === 'brief') {
         const gs = gsRef.current;
@@ -1505,6 +1523,14 @@ export default function GameCanvas() {
     };
     canvas.addEventListener('click', handleBriefClick);
 
+    const pauseEl = pauseBtnRef.current!;
+    const handlePauseDown = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (gsRef.current.phase === 'play') gsRef.current.paused = !gsRef.current.paused;
+    };
+    pauseEl.addEventListener('pointerdown', handlePauseDown);
+
     let last    = performance.now();
     let raf     = 0;
     let mounted = true;
@@ -1512,8 +1538,8 @@ export default function GameCanvas() {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
       const g = gsRef.current;
-      if (g.phase === 'play' || g.phase === 'die' || g.phase === 'brief') update(g, dt);
-      else { tickStars(g, dt); tickSparks(g, dt); }
+      if (!g.paused && (g.phase === 'play' || g.phase === 'die' || g.phase === 'brief')) update(g, dt);
+      else if (!g.paused) { tickStars(g, dt); tickSparks(g, dt); }
       render(ctx, g, now / 1000, isTouch);
 
       // ── analytics: fire once per state transition ──────────────────────
@@ -1574,6 +1600,12 @@ export default function GameCanvas() {
         hudControlsRef.current.style.display = g.phase === 'play' ? 'flex' : 'none';
       }
 
+      // pause button — visible during play on all devices
+      if (pauseBtnRef.current) {
+        pauseBtnRef.current.style.display = g.phase === 'play' ? 'flex' : 'none';
+        pauseBtnRef.current.textContent   = g.paused ? '▶' : '⏸';
+      }
+
       // briefing choice overlay — touch only, shown only when at bottom of scrollable content
       if (choiceOverlayRef.current) {
         const { maxScroll } = briefScrollBounds(g);
@@ -1619,6 +1651,7 @@ export default function GameCanvas() {
       retryEl.removeEventListener('click', handleRetry);
       randomEl.removeEventListener('click', handleRandomize);
       canvas.removeEventListener('click', handleBriefClick);
+      pauseEl.removeEventListener('pointerdown', handlePauseDown);
     };
   }, [navigate]);
 
@@ -1652,6 +1685,7 @@ export default function GameCanvas() {
             className="game-canvas"
             onTouchEnd={() => {
               const gs = gsRef.current;
+              if (gs.paused) return;
               if (gs.phase === 'brief') {
                 const { maxScroll } = briefScrollBounds(gs);
                 const atBottom = maxScroll <= 0 || gs.txScroll >= maxScroll - 1;
@@ -1713,6 +1747,13 @@ export default function GameCanvas() {
             </div>
             <button ref={lbRetryRef} className="lb-retry-btn">► PLAY AGAIN</button>
           </div>
+          <button
+            ref={pauseBtnRef}
+            className="pause-btn"
+            style={{ display: 'none' }}
+            aria-label="Pause"
+          >⏸</button>
+
           <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
             <div className="touch-row">
               <button
