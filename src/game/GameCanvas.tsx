@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { track } from '@vercel/analytics';
 import { supabase } from '../lib/supabase';
 import { submitScore, fetchTopScores } from '../lib/scores';
 
@@ -28,7 +29,10 @@ const PY = H - 52;       // player y center
 const P_SPD = 170;       // player move speed px/s
 const B_SPD = -300;      // player bullet speed px/s (up)
 const EB_SPD = 150;      // enemy bullet speed px/s (down)
-const MAX_BULLETS = 3;
+const MAX_BULLETS    = 3;
+const DOCK_TOL       = 44;   // px from center counted as aligned
+const DOCK_HOLD_TIME = 2.2;  // seconds to hold alignment for successful dock
+const ASCENT_DURATION = 1.8; // seconds for rocket ascent animation
 
 
 /* ── palette ─────────────────────────────────────────────────────────── */
@@ -64,9 +68,9 @@ interface WaveBrief {
 const INTRO_TRANSMISSION: string[] = [
   '>>> NEO CONTROL  //  INCOMING TRANSMISSION',
   '',
-  'CADET. THIS IS NEO CONTROL.',
+  'SPACE CADET. THIS IS NEO CONTROL.',
   '',
-  'TODAY: ROUTINE SUPPLY RUN TO NEO-7.',
+  'TODAY\'S OBJECTIVE: ROUTINE SUPPLY RUN TO NEO-7.',
   'THE AUTOPILOT IS BROKEN, WHICH IS',
   'THE ONLY REASON WE CALLED YOU.',
   '',
@@ -88,8 +92,8 @@ const TRANSMISSIONS: WaveBrief[] = [
       '',
       'YOU\'VE ENTERED SECTOR 7-G WITHOUT',
       'TRANSIT CLEARANCE. THOSE DRONES',
-      'WERE TRAFFIC ENFORCEMENT — YOU',
-      'DESTROYED ELEVEN. IT\'S ALL ON',
+      'WERE TRAFFIC ENFORCEMENT... YOU',
+      'DESTROYED ELEVEN... AND IT\'S ALL ON',
       'SECURITY FOOTAGE. THEY\'VE ESCALATED',
       'TO THE GALACTIC TRANSIT AUTHORITY.',
       '',
@@ -112,7 +116,7 @@ const TRANSMISSIONS: WaveBrief[] = [
     lines: [
       '>>> NEO CONTROL  //  REROUTING',
       '',
-      'CADET.',
+      'SPACE CADET.',
       '',
       'DUE TO THE SECTOR 7-G INCIDENT,',
       'YOUR STANDARD RETURN PATH IS NOW',
@@ -138,7 +142,7 @@ const TRANSMISSIONS: WaveBrief[] = [
     lines: [
       '>>> NEO CONTROL  //  INTEL UPDATE',
       '',
-      'CADET.',
+      'SPACE CADET.',
       '',
       'FORMAL COMPLAINTS RECEIVED FROM',
       'THE GTA, TWO MERCENARY GUILDS,',
@@ -166,7 +170,7 @@ const TRANSMISSIONS: WaveBrief[] = [
     lines: [
       '>>> NEO CONTROL  //  MEDIA ALERT',
       '',
-      'CADET. YOU\'RE ON THE NEWS.',
+      'SPACECADET. YOU\'RE ON THE NEWS.',
       '',
       'HEADLINE: "UNIDENTIFIED SHIP',
       'TERRORIZES OUTER SECTORS —',
@@ -184,7 +188,7 @@ const TRANSMISSIONS: WaveBrief[] = [
     lines: [
       '>>> [OPEN CHANNEL]  NEO CONTROL',
       '',
-      'CADET.',
+      'SPACE CADET.',
       '',
       'YOU KNOW WHAT YOU\'RE DOING BY NOW.',
       'OR YOU DON\'T AND IT\'S WORKING.',
@@ -295,8 +299,12 @@ interface GS {
   txHasChoice:   boolean;
   txProfiles:    [PhysicsProfile, PhysicsProfile] | null;
   txChoiceTimer: number;
+  txScroll:      number;
   missionKind:     'approach' | 'eliminate';
   stationProgress: number;
+  dockSeq:         boolean;
+  dockLock:        number;
+  dockAscent:      number;
   totalEnemies:    number;
   scoreLog:        ScoreEvent[];
   activeProfile:   PhysicsProfile;
@@ -465,9 +473,12 @@ function newGame(
     spawnRockT: 5 + Math.random() * 3,
     planets: [], spawnPlanetT: 6,
     txLines: [], txLine: 0, txCh: 0, txDone: false, txWait: 0,
-    txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0,
+    txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0, txScroll: 0,
     missionKind:     wave === 1 ? 'approach' : 'eliminate',
     stationProgress: 0,
+    dockSeq:         false,
+    dockLock:        0,
+    dockAscent:      0,
     totalEnemies:    enemies.length,
     scoreLog:        [],
     activeProfile:   profile,
@@ -691,8 +702,9 @@ function tickPlanets(gs: GS, dt: number) {
 
 /* ── update ──────────────────────────────────────────────────────────── */
 function tickStars(gs: GS, dt: number) {
+  const speedMult = gs.dockSeq ? 0.22 : 1;
   gs.stars.forEach(s => {
-    s.y += (0.5 + s.s * 0.25) * dt * 30;
+    s.y += (0.5 + s.s * 0.25) * dt * 30 * speedMult;
     if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
   });
 }
@@ -736,7 +748,7 @@ function update(gs: GS, dt: number) {
       gs.txHasChoice  = !!brief.profiles;
       gs.txProfiles   = brief.profiles ?? null;
       gs.txChoiceTimer = 0;
-      gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0;
+      gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0; gs.txScroll = 0;
     }
     tickStars(gs, dt); tickSparks(gs, dt); tickPlanets(gs, dt);
     return;
@@ -755,21 +767,8 @@ function update(gs: GS, dt: number) {
           gs.txCh   = gs.txLines[gs.txLine].length;
         }
       }
-    } else {
-      if (gs.txHasChoice) {
-        gs.txChoiceTimer += dt;
-        if (gs.txChoiceTimer >= 12) {
-          // auto-select option 1 after 12 seconds
-          Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles![0]));
-        }
-      } else {
-        gs.txWait += dt;
-        if (gs.txWait >= 4) {
-          if (gs.txIsIntro) gs.phase = 'play';
-          else Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile));
-        }
-      }
     }
+    // player must actively continue — no auto-advance
     tickStars(gs, dt); tickPlanets(gs, dt);
     return;
   }
@@ -814,8 +813,10 @@ function update(gs: GS, dt: number) {
 
   /* ── player move ── */
   gs.invT = Math.max(0, gs.invT - dt);
-  if (gs.keys.has('ArrowLeft')  || gs.keys.has('a')) gs.px = Math.max(14, gs.px - P_SPD * dt);
-  if (gs.keys.has('ArrowRight') || gs.keys.has('d')) gs.px = Math.min(W - 14, gs.px + P_SPD * dt);
+  if (gs.dockAscent <= 0) {
+    if (gs.keys.has('ArrowLeft')  || gs.keys.has('a')) gs.px = Math.max(14, gs.px - P_SPD * dt);
+    if (gs.keys.has('ArrowRight') || gs.keys.has('d')) gs.px = Math.min(W - 14, gs.px + P_SPD * dt);
+  }
 
   /* ── player shoot ── */
   gs.shootT = Math.max(0, gs.shootT - dt);
@@ -853,9 +854,9 @@ function update(gs: GS, dt: number) {
   gs.enemies = gs.enemies.filter(e => !killedEnemies.has(e.id));
   gs.bullets = gs.bullets.filter(b => !usedBullets.has(b.id));
 
-  // station approach: each kill advances docking progress
-  if (gs.missionKind === 'approach' && killedEnemies.size > 0) {
-    gs.stationProgress = Math.min(1, gs.stationProgress + killedEnemies.size * 0.015);
+  /* ── station approach: progress mirrors enemy clearing ── */
+  if (gs.missionKind === 'approach' && !gs.dockSeq && gs.totalEnemies > 0) {
+    gs.stationProgress = 1 - gs.enemies.length / gs.totalEnemies;
   }
 
   /* ── enemy bullets → player ── */
@@ -891,14 +892,33 @@ function update(gs: GS, dt: number) {
     }
   });
 
-  /* ── station approach: passive progress fill ── */
-  if (gs.missionKind === 'approach') {
-    gs.stationProgress = Math.min(1, gs.stationProgress + 0.008 * dt);
+  /* ── docking sequence: trigger when all enemies cleared ── */
+  if (gs.missionKind === 'approach' && !gs.dockSeq && gs.enemies.length === 0) {
+    gs.dockSeq      = true;
+    gs.stationProgress = 1;
+    gs.bullets      = gs.bullets.filter(b => b.player);
+    gs.planets      = [];
+    gs.gravRocks    = [];
+    gs.ufo          = null;
+    gs.ufoT         = 999;
+    gs.spawnPlanetT = 999;
+    gs.spawnRockT   = 999;
+  }
+  if (gs.dockSeq && gs.dockAscent <= 0) {
+    const aligned = Math.abs(gs.px - W / 2) <= DOCK_TOL;
+    gs.dockLock = aligned
+      ? Math.min(DOCK_HOLD_TIME, gs.dockLock + dt)
+      : Math.max(0, gs.dockLock - dt * 1.5);
+  }
+  /* ── dock ascent: rocket flies up to station ── */
+  if (gs.dockSeq && gs.dockLock >= DOCK_HOLD_TIME && gs.dockAscent < 1) {
+    gs.dockAscent = Math.min(1, gs.dockAscent + dt / ASCENT_DURATION);
+    gs.px += (W / 2 - gs.px) * Math.min(1, dt * 10);
   }
 
   /* ── wave clear ── */
   const waveClear = gs.missionKind === 'approach'
-    ? gs.stationProgress >= 1
+    ? gs.dockSeq && gs.dockAscent >= 1
     : gs.enemies.length === 0;
 
   if (waveClear && gs.waveT <= 0) {
@@ -909,9 +929,11 @@ function update(gs: GS, dt: number) {
     gs.waveT  = 2.5;
   }
 
-  tickUFO(gs, dt);
-  tickGravRocks(gs, dt);
-  tickPlanets(gs, dt);
+  if (!gs.dockSeq) {
+    tickUFO(gs, dt);
+    tickGravRocks(gs, dt);
+    tickPlanets(gs, dt);
+  }
   tickSparks(gs, dt); tickStars(gs, dt);
 }
 
@@ -965,17 +987,30 @@ function drawPlanet(ctx: CanvasRenderingContext2D, planet: Planet) {
 }
 
 /* ── brief overlay ───────────────────────────────────────────────────── */
-const TX_PAD = 14;
-const TX_TOP = 56;
-const TX_LH  = 20;
+const TX_PAD    = 8;
+const TX_TOP    = 56;
+const TX_LH     = 20;
+const TX_FOOTER = 44; // height reserved for footer button area
+
+function briefScrollBounds(gs: GS) {
+  const bh        = H - TX_TOP - 36;
+  const clipTop   = TX_TOP + 26;
+  const clipH     = bh - 26 - TX_FOOTER;
+  const ly        = TX_TOP + 40;
+  const maxScroll = Math.max(0, (ly + gs.txLines.length * TX_LH) - (clipTop + clipH));
+  const arrowW    = 130, arrowH = 32;
+  const arrowX    = W / 2 - arrowW / 2;
+  const arrowY    = clipTop + clipH - arrowH;
+  return { maxScroll, clipTop, clipH, arrowX, arrowY, arrowW, arrowH };
+}
 
 function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
   const bw = W - TX_PAD * 2;
   const bh = H - TX_TOP - 36;
 
+  // box
   ctx.fillStyle = 'rgba(7,6,14,0.93)';
   ctx.fillRect(TX_PAD, TX_TOP, bw, bh);
-
   ctx.strokeStyle = gs.txHasChoice ? C.amber : C.green;
   ctx.lineWidth   = 1;
   ctx.strokeRect(TX_PAD, TX_TOP, bw, bh);
@@ -986,69 +1021,132 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
     : gs.txHasChoice
       ? '── COMMAND DECISION REQUIRED ──'
       : '── INCOMING TRANSMISSION ──';
-
   ctx.font      = "15px 'VT323', monospace";
   ctx.textAlign = 'center';
   ctx.fillStyle = gs.txHasChoice ? C.amber : C.muted;
   ctx.fillText(header, W / 2, TX_TOP + 16);
-
   ctx.strokeStyle = 'rgba(122,112,136,0.35)';
   ctx.beginPath();
   ctx.moveTo(TX_PAD + 6, TX_TOP + 22);
   ctx.lineTo(TX_PAD + bw - 6, TX_TOP + 22);
   ctx.stroke();
 
-  // content lines
-  const lx = TX_PAD + 10;
-  const ly = TX_TOP + 40;
+  // scroll metrics
+  const { maxScroll, clipTop, clipH, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(gs);
+  const scroll      = Math.min(gs.txScroll, maxScroll);
+  const hasOverflow = maxScroll > 0;
+  const atBottom    = scroll >= maxScroll - 1;
+  const lx          = TX_PAD + 10;
+  const ly          = TX_TOP + 40;
+
+  // clip content to text area
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(TX_PAD + 1, clipTop, bw - 2, clipH);
+  ctx.clip();
+
   ctx.font      = "15px 'VT323', monospace";
   ctx.textAlign = 'left';
-
   for (let i = 0; i < gs.txLines.length; i++) {
     if (i > gs.txLine) break;
+    const lineY     = ly + i * TX_LH - scroll;
+    if (lineY < clipTop - TX_LH) continue;
+    if (lineY > clipTop + clipH + TX_LH) break;
     const full      = gs.txLines[i];
     const isCurrent = i === gs.txLine;
     const text      = (isCurrent && !gs.txDone) ? full.slice(0, Math.floor(gs.txCh)) : full;
-
     if (text.length > 0) {
       let color = C.green;
       if      (text.startsWith('>>>'))  color = C.amber;
       else if (text.startsWith('[1]'))  color = C.cyan;
       else if (text.startsWith('[2]'))  color = C.pink;
       ctx.fillStyle = color;
-      ctx.fillText(text, lx, ly + i * TX_LH);
+      ctx.fillText(text, lx, lineY);
     }
-
     if (isCurrent && !gs.txDone && Math.sin(t * 9) > 0) {
       const tw = text.length > 0 ? ctx.measureText(text).width : 0;
       ctx.fillStyle = C.green;
-      ctx.fillRect(lx + tw + 1, ly + i * TX_LH - 13, 7, 14);
+      ctx.fillRect(lx + tw + 1, lineY - 13, 7, 14);
     }
   }
+  ctx.restore();
 
-  // footer
-  ctx.font      = "14px 'VT323', monospace";
+  // gradient fade + scroll arrow (only when more content is hidden below)
+  if (hasOverflow && !atBottom) {
+    // gradient fade blending into the arrow area
+    const grad = ctx.createLinearGradient(0, arrowY - 20, 0, arrowY);
+    grad.addColorStop(0, 'rgba(7,6,14,0)');
+    grad.addColorStop(1, 'rgba(7,6,14,1)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(TX_PAD + 1, arrowY - 20, bw - 2, 20);
+
+    // solid background so no text bleeds through
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(TX_PAD + 1, arrowY, bw - 2, arrowH);
+
+    // pulsing arrow button
+    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 4);
+    ctx.fillStyle   = 'rgba(247,199,106,0.10)';
+    ctx.fillRect(arrowX, arrowY + 2, arrowW, arrowH - 4);
+    ctx.strokeStyle = C.amber;
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(arrowX, arrowY + 2, arrowW, arrowH - 4);
+    ctx.fillStyle   = C.amber;
+    ctx.font        = "15px 'VT323', monospace";
+    ctx.textAlign   = 'center';
+    ctx.fillText('MORE  ↓', W / 2, arrowY + arrowH - 7);
+    ctx.globalAlpha = 1;
+  }
+
+  // footer — solid background prevents any text bleeding through
+  const footerTop = TX_TOP + bh - TX_FOOTER;
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(TX_PAD + 1, footerTop, bw - 2, TX_FOOTER);
+
+  const btnBottom = TX_TOP + bh - 8;
+  ctx.font      = "15px 'VT323', monospace";
   ctx.textAlign = 'center';
+  ctx.lineWidth = 1;
+
   if (gs.txDone && gs.txHasChoice) {
-    const remaining = Math.ceil(12 - gs.txChoiceTimer);
-    if (Math.sin(t * 3) > 0) {
-      ctx.fillStyle = C.amber;
-      ctx.fillText(
-        isTouch ? `[ AUTO: ${remaining}s ]` : `PRESS 1 OR 2  [ AUTO: ${remaining}s ]`,
-        W / 2, TX_TOP + bh - 10,
-      );
-    }
+    const btnH = 28, btnW = 82, gap = 10;
+    const bx1  = W / 2 - btnW - gap / 2;
+    const bx2  = W / 2 + gap / 2;
+    const by   = btnBottom - btnH;
+    ctx.fillStyle = 'rgba(0,229,255,0.10)';
+    ctx.fillRect(bx1, by, btnW, btnH);
+    ctx.strokeStyle = C.cyan;
+    ctx.strokeRect(bx1, by, btnW, btnH);
+    ctx.fillStyle = C.cyan;
+    ctx.fillText('[ 1 ]', bx1 + btnW / 2, by + 20);
+    ctx.fillStyle = 'rgba(255,79,216,0.10)';
+    ctx.fillRect(bx2, by, btnW, btnH);
+    ctx.strokeStyle = C.pink;
+    ctx.strokeRect(bx2, by, btnW, btnH);
+    ctx.fillStyle = C.pink;
+    ctx.fillText('[ 2 ]', bx2 + btnW / 2, by + 20);
+
   } else if (gs.txDone) {
-    if (Math.sin(t * 3) > 0) {
-      ctx.fillStyle = C.muted;
-      ctx.fillText(
-        isTouch ? '[ TAP TO CONTINUE ]' : '[ SPACE TO CONTINUE ]',
-        W / 2, TX_TOP + bh - 10,
-      );
-    }
+    const btnH = 28, btnW = 172;
+    const bx   = W / 2 - btnW / 2;
+    const by   = btnBottom - btnH;
+    ctx.fillStyle = 'rgba(102,242,165,0.10)';
+    ctx.fillRect(bx, by, btnW, btnH);
+    ctx.strokeStyle = C.green;
+    ctx.strokeRect(bx, by, btnW, btnH);
+    ctx.fillStyle = C.green;
+    ctx.fillText(isTouch ? 'TAP TO CONTINUE' : 'SPACE TO CONTINUE', W / 2, by + 20);
+
   } else {
-    ctx.fillStyle = 'rgba(122,112,136,0.5)';
-    ctx.fillText(isTouch ? 'TAP TO SKIP' : 'SPACE TO SKIP', W / 2, TX_TOP + bh - 10);
+    const btnH = 24, btnW = 130;
+    const bx   = W / 2 - btnW / 2;
+    const by   = btnBottom - btnH;
+    ctx.fillStyle = 'rgba(122,112,136,0.07)';
+    ctx.fillRect(bx, by, btnW, btnH);
+    ctx.strokeStyle = 'rgba(122,112,136,0.28)';
+    ctx.strokeRect(bx, by, btnW, btnH);
+    ctx.fillStyle = 'rgba(122,112,136,0.6)';
+    ctx.fillText(isTouch ? 'TAP TO SKIP' : 'SPACE TO SKIP', W / 2, by + 17);
   }
   ctx.textAlign = 'left';
 }
@@ -1090,18 +1188,27 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     drawSpr(ctx, eSpr(e.kind), flash ? C.white : col, e.x, e.y + bob);
   });
 
-  // station icon (wave 1 approach, top center, fades in when progress > 0.6)
-  if (gs.missionKind === 'approach' && gs.stationProgress > 0.6) {
-    const stAlpha = Math.min(1, (gs.stationProgress - 0.6) / 0.25);
-    ctx.globalAlpha = stAlpha * (0.55 + 0.3 * Math.sin(t * 2.2));
-    drawSpr(ctx, SPR.station, C.green, W / 2, 22, 2);
-    ctx.globalAlpha = stAlpha;
-    ctx.font      = "11px 'VT323', monospace";
-    ctx.textAlign = 'center';
-    ctx.fillStyle = C.green;
-    ctx.fillText('NEO-7', W / 2, 40);
-    ctx.textAlign = 'left';
-    ctx.globalAlpha = 1;
+  // station icon — fades in during approach, grows during docking sequence
+  if (gs.missionKind === 'approach') {
+    if (gs.dockSeq) {
+      const prog  = gs.dockLock / DOCK_HOLD_TIME;
+      const scale = 2 + prog * 2.5;
+      const yPos  = 22 + prog * 55;
+      ctx.globalAlpha = 0.8 + 0.2 * Math.sin(t * 8);
+      drawSpr(ctx, SPR.station, C.green, W / 2, yPos, scale);
+      ctx.globalAlpha = 1;
+    } else if (gs.stationProgress > 0.6) {
+      const stAlpha = Math.min(1, (gs.stationProgress - 0.6) / 0.25);
+      ctx.globalAlpha = stAlpha * (0.55 + 0.3 * Math.sin(t * 2.2));
+      drawSpr(ctx, SPR.station, C.green, W / 2, 22, 2);
+      ctx.globalAlpha = stAlpha;
+      ctx.font      = "11px 'VT323', monospace";
+      ctx.textAlign = 'center';
+      ctx.fillStyle = C.green;
+      ctx.fillText('NEO-7', W / 2, 40);
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
+    }
   }
 
   // bullets
@@ -1115,9 +1222,10 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   if (gs.phase !== 'die' || gs.dieT > 1.2) {
     const blink = gs.invT > 0 && Math.sin(t * 12) > 0;
     if (!blink) {
-      drawSpr(ctx, SPR.player, C.cyan, gs.px, PY);
-      if (Math.sin(t * 22) > 0)
-        drawSpr(ctx, SPR.thruster, C.pink, gs.px, PY + sprH(SPR.player) / 2 + PX, PX);
+      const playerY = gs.dockAscent > 0 ? PY - (PY - 45) * gs.dockAscent : PY;
+      drawSpr(ctx, SPR.player, C.cyan, gs.px, playerY);
+      if (gs.dockAscent > 0 || Math.sin(t * 22) > 0)
+        drawSpr(ctx, SPR.thruster, C.pink, gs.px, playerY + sprH(SPR.player) / 2 + PX, PX);
     }
   }
 
@@ -1128,6 +1236,76 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     ctx.fillRect(Math.floor(s.x), Math.floor(s.y), PX, PX);
   });
   ctx.globalAlpha = 1;
+
+  // docking alignment overlay (hidden once ascent begins)
+  if (gs.missionKind === 'approach' && gs.dockSeq && gs.dockAscent <= 0) {
+    const cx      = W / 2;
+    const aligned = Math.abs(gs.px - cx) <= DOCK_TOL;
+    const lockPct = gs.dockLock / DOCK_HOLD_TIME;
+
+    // dim everything outside the corridor
+    ctx.fillStyle = 'rgba(7,6,14,0.55)';
+    ctx.fillRect(0, 0, cx - DOCK_TOL, H);
+    ctx.fillRect(cx + DOCK_TOL, 0, W - (cx + DOCK_TOL), H);
+
+    // corridor walls
+    ctx.strokeStyle = aligned ? 'rgba(102,242,165,0.85)' : 'rgba(247,199,106,0.75)';
+    ctx.lineWidth   = 1.5;
+    ctx.setLineDash([8, 5]);
+    ctx.beginPath();
+    ctx.moveTo(cx - DOCK_TOL, 0); ctx.lineTo(cx - DOCK_TOL, H);
+    ctx.moveTo(cx + DOCK_TOL, 0); ctx.lineTo(cx + DOCK_TOL, H);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // center hairline
+    ctx.strokeStyle = 'rgba(102,242,165,0.15)';
+    ctx.lineWidth   = 1;
+    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
+
+    // status text
+    ctx.font      = "20px 'VT323', monospace";
+    ctx.textAlign = 'center';
+    ctx.fillStyle = aligned ? C.green : C.amber;
+    ctx.fillText(aligned ? 'HOLDING ALIGNMENT' : 'ALIGN FOR DOCK', cx, PY - 44);
+
+    // direction nudge
+    if (!aligned) {
+      ctx.font        = "15px 'VT323', monospace";
+      ctx.fillStyle   = C.amber;
+      ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 5);
+      ctx.fillText(gs.px < cx ? '→  MOVE RIGHT' : 'MOVE LEFT  ←', cx, PY - 26);
+      ctx.globalAlpha = 1;
+    }
+
+    // dock-lock meter
+    const mW = 130, mH = 8;
+    const mx = cx - mW / 2, my = PY + 32;
+    ctx.fillStyle   = 'rgba(102,242,165,0.07)';
+    ctx.fillRect(mx, my, mW, mH);
+    ctx.strokeStyle = 'rgba(102,242,165,0.25)';
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(mx, my, mW, mH);
+    if (lockPct > 0) {
+      ctx.fillStyle = aligned ? C.green : 'rgba(102,242,165,0.35)';
+      ctx.fillRect(mx, my, Math.round(mW * lockPct), mH);
+    }
+    ctx.font      = "13px 'VT323', monospace";
+    ctx.fillStyle = aligned ? C.green : C.muted;
+    ctx.fillText('DOCK LOCK', cx, my - 4);
+    ctx.textAlign = 'left';
+  }
+
+  // ascent message
+  if (gs.missionKind === 'approach' && gs.dockAscent > 0 && gs.dockAscent < 1) {
+    ctx.font      = "22px 'VT323', monospace";
+    ctx.textAlign = 'center';
+    ctx.fillStyle = C.green;
+    ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 6);
+    ctx.fillText('DOCKING…', W / 2, PY - 30);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+  }
 
   drawHUD(ctx, gs);
 }
@@ -1204,8 +1382,11 @@ export default function GameCanvas() {
   const deskPctRef       = useRef<HTMLSpanElement>(null);
   const deskFillRef      = useRef<HTMLDivElement>(null);
   const deskLogRef       = useRef<HTMLUListElement>(null);
-  const navigate       = useNavigate();
-  const gsRef          = useRef<GS>(introGame());
+  const navigate         = useNavigate();
+  const gsRef            = useRef<GS>(introGame());
+  const trackedPhaseRef  = useRef<Phase>('brief');
+  const trackedWaveRef   = useRef(0);
+  const trackedAscentRef = useRef(false);
 
   useEffect(() => {
     const canvas  = canvasRef.current!;
@@ -1299,8 +1480,25 @@ export default function GameCanvas() {
     retryEl.addEventListener('click', handleRetry);
     randomEl.addEventListener('click', handleRandomize);
 
-    let last = performance.now();
-    let raf  = 0;
+    // ── scroll arrow click (desktop mouse) ──────────────────────────────
+    const handleBriefClick = (e: MouseEvent) => {
+      const g = gsRef.current;
+      if (g.phase !== 'brief') return;
+      const rect = canvas.getBoundingClientRect();
+      const cx = (e.clientX - rect.left) * (W / rect.width);
+      const cy = (e.clientY - rect.top)  * (H / rect.height);
+      const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(g);
+      if (maxScroll > 0 && g.txScroll < maxScroll - 1
+          && cx >= arrowX && cx <= arrowX + arrowW
+          && cy >= arrowY && cy <= arrowY + arrowH) {
+        g.txScroll = maxScroll;
+      }
+    };
+    canvas.addEventListener('click', handleBriefClick);
+
+    let last    = performance.now();
+    let raf     = 0;
+    let mounted = true;
     const tick = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
@@ -1308,6 +1506,24 @@ export default function GameCanvas() {
       if (g.phase === 'play' || g.phase === 'die' || g.phase === 'brief') update(g, dt);
       else { tickStars(g, dt); tickSparks(g, dt); }
       render(ctx, g, now / 1000, isTouch);
+
+      // ── analytics: fire once per state transition ──────────────────────
+      const prevPhase = trackedPhaseRef.current;
+      if (g.phase === 'play' && prevPhase === 'brief' && trackedWaveRef.current === 0) {
+        track('game_start');
+      }
+      if (g.waveT > 0 && g.wave > trackedWaveRef.current) {
+        track('wave_clear', { wave: g.wave, score: g.score });
+        trackedWaveRef.current = g.wave;
+      }
+      if (g.dockAscent >= 1 && !trackedAscentRef.current) {
+        track('dock_success', { score: g.score });
+        trackedAscentRef.current = true;
+      }
+      if (g.phase === 'over' && prevPhase !== 'over') {
+        track('game_over', { wave: g.wave, score: g.score });
+      }
+      trackedPhaseRef.current = g.phase;
 
       // sidebar progress bar (DOM, no React re-render)
       if (sidebarRef.current && progressFillRef.current) {
@@ -1349,9 +1565,11 @@ export default function GameCanvas() {
         hudControlsRef.current.style.display = g.phase === 'play' ? 'flex' : 'none';
       }
 
-      // briefing choice overlay — touch only, shown only when a choice is pending
+      // briefing choice overlay — touch only, shown only when at bottom of scrollable content
       if (choiceOverlayRef.current) {
-        const showChoices = isTouch && g.phase === 'brief' && g.txDone && g.txHasChoice;
+        const { maxScroll } = briefScrollBounds(g);
+        const atBottom      = maxScroll <= 0 || g.txScroll >= maxScroll - 1;
+        const showChoices   = isTouch && g.phase === 'brief' && g.txDone && g.txHasChoice && atBottom;
         choiceOverlayRef.current.style.display = showChoices ? 'flex' : 'none';
       }
 
@@ -1378,9 +1596,12 @@ export default function GameCanvas() {
 
       raf = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
+    document.fonts.ready.then(() => {
+      if (mounted) raf = requestAnimationFrame(tick);
+    });
 
     return () => {
+      mounted = false;
       cancelAnimationFrame(raf);
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup',   onUp);
@@ -1388,6 +1609,7 @@ export default function GameCanvas() {
       inputEl.removeEventListener('keydown', handleLbKey);
       retryEl.removeEventListener('click', handleRetry);
       randomEl.removeEventListener('click', handleRandomize);
+      canvas.removeEventListener('click', handleBriefClick);
     };
   }, [navigate]);
 
@@ -1419,8 +1641,21 @@ export default function GameCanvas() {
             ref={canvasRef}
             width={W} height={H}
             className="game-canvas"
-            onTouchEnd={() => {
+            onTouchEnd={(e) => {
               const gs = gsRef.current;
+              if (gs.phase === 'brief') {
+                const touch = e.changedTouches[0];
+                const rect  = canvasRef.current!.getBoundingClientRect();
+                const cx = (touch.clientX - rect.left) * (W / rect.width);
+                const cy = (touch.clientY - rect.top)  * (H / rect.height);
+                const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(gs);
+                if (maxScroll > 0 && gs.txScroll < maxScroll - 1
+                    && cx >= arrowX && cx <= arrowX + arrowW
+                    && cy >= arrowY && cy <= arrowY + arrowH) {
+                  gs.txScroll = maxScroll;
+                  return;
+                }
+              }
               gs.keys.add(' ');
               setTimeout(() => gs.keys.delete(' '), 80);
             }}

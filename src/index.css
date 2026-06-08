@@ -38,9 +38,63 @@ body {
   min-height: 100vh;
   max-width: 100%;
   overflow-x: hidden;
+  overscroll-behavior: none;
   background:
     linear-gradient(180deg, rgba(0, 229, 255, 0.06), transparent 32rem),
     var(--bg);
+}
+
+/* ── landscape mobile: rotate prompt ── */
+.rotate-prompt {
+  display: none;
+}
+
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .rotate-prompt {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: #07060e;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    font-family: 'VT323', monospace;
+    text-align: center;
+  }
+
+  #root {
+    display: none;
+  }
+}
+
+.rotate-icon {
+  font-size: 3rem;
+  color: var(--cyan);
+  margin: 0;
+  animation: rotate-hint 2s ease-in-out infinite;
+}
+
+.rotate-title {
+  font-size: 1.6rem;
+  color: var(--heading);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.rotate-sub {
+  font-size: 0.9rem;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  margin: 0;
+}
+
+@keyframes rotate-hint {
+  0%, 100% { transform: rotate(0deg); }
+  40%       { transform: rotate(90deg); }
+  60%       { transform: rotate(90deg); }
 }
 
 /* scanline overlay */
@@ -1165,10 +1219,10 @@ button:disabled {
 .hud-controls {
   display: none;
   position: fixed;
-  bottom: env(safe-area-inset-bottom, 16px);
-  left: 0;
-  right: 0;
-  padding: 0 0 8px;
+  bottom: 0;
+  left: env(safe-area-inset-left, 0px);
+  right: env(safe-area-inset-right, 0px);
+  padding: 0 0 calc(env(safe-area-inset-bottom, 0px) + 8px);
   justify-content: center;
   align-items: center;
   gap: 24px;
@@ -1296,7 +1350,7 @@ button:disabled {
 
 .touch-row {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
 }
 
@@ -1324,17 +1378,20 @@ button:disabled {
 }
 
 .touch-btn-choice {
-  min-width: 52px;
-  height: 52px;
+  min-width: 110px;
+  height: 64px;
   background: rgba(247, 199, 106, 0.1);
-  border-color: rgba(247, 199, 106, 0.38);
+  border-color: rgba(247, 199, 106, 0.45);
   color: var(--amber);
-  font-size: 1.1rem;
-  text-shadow: 0 0 10px rgba(247, 199, 106, 0.4);
+  font-size: 1.6rem;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 12px rgba(247, 199, 106, 0.5);
+  border-radius: 4px;
 }
 
 .touch-btn-choice:active {
-  background: rgba(247, 199, 106, 0.26);
+  background: rgba(247, 199, 106, 0.28);
+  border-color: var(--amber);
 }
 
 /* ── leaderboard overlay ── */
@@ -1345,7 +1402,7 @@ button:disabled {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: 24px;
   background: rgba(4, 5, 14, 0.97);
   z-index: 20;
   padding: 24px 20px;
@@ -1358,27 +1415,31 @@ button:disabled {
   letter-spacing: 0.22em;
   text-transform: uppercase;
   text-shadow: 0 0 24px rgba(255, 90, 90, 0.5);
-  margin: 0;
+  margin: 0 0 6px;
 }
 
 .lb-score-block {
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .lb-label {
-  font-size: 0.6rem;
+  font-size: 0.75rem;
   color: var(--muted);
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  margin: 0 0 4px;
+  margin: 0;
 }
 
 .lb-score-value {
-  font-size: 2.6rem;
+  font-size: 2.8rem;
   color: var(--cyan);
   letter-spacing: 0.08em;
   text-shadow: 0 0 20px rgba(0, 229, 255, 0.5);
   margin: 0;
+  line-height: 1;
 }
 
 .lb-name-section {
@@ -1437,16 +1498,29 @@ button:disabled {
 }
 
 .lb-submit-btn {
-  background: rgba(102, 242, 165, 0.08);
-  border: 1px solid rgba(102, 242, 165, 0.45);
+  background: rgba(102, 242, 165, 0.12);
+  border: 1px solid rgba(102, 242, 165, 0.55);
   color: var(--green);
   font-family: var(--mono);
-  font-size: 0.82rem;
+  font-size: 1rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  padding: 7px 22px;
+  padding: 12px 32px;
+  min-height: 48px;
   cursor: pointer;
   border-radius: 2px;
+  width: 100%;
+  max-width: 220px;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.lb-submit-btn:hover {
+  background: rgba(102, 242, 165, 0.22);
+  border-color: var(--green);
+}
+
+.lb-submit-btn:active {
+  background: rgba(102, 242, 165, 0.32);
 }
 
 .lb-submit-btn:disabled {
@@ -1505,36 +1579,40 @@ button:disabled {
 }
 
 .lb-retry-btn {
-  background: transparent;
-  border: 1px solid rgba(247, 199, 106, 0.4);
+  background: rgba(247, 199, 106, 0.08);
+  border: 1px solid rgba(247, 199, 106, 0.45);
   color: var(--amber);
   font-family: var(--mono);
-  font-size: 0.82rem;
+  font-size: 1rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  padding: 7px 22px;
+  padding: 12px 32px;
+  min-height: 48px;
   cursor: pointer;
   border-radius: 2px;
   margin-top: 4px;
+  width: 100%;
+  max-width: 220px;
+  transition: background 0.12s, border-color 0.12s;
 }
 
 .lb-retry-btn:active,
 .lb-retry-btn:hover {
-  background: rgba(247, 199, 106, 0.1);
+  background: rgba(247, 199, 106, 0.18);
   border-color: var(--amber);
 }
 
 .touch-choice-overlay {
   display: none;
   position: absolute;
-  bottom: 5%;
+  bottom: 4%;
   left: 50%;
   transform: translateX(-50%);
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 16px 24px 18px;
-  background: rgba(4, 5, 14, 0.94);
+  gap: 12px;
+  padding: 16px 28px 20px;
+  background: rgba(4, 5, 14, 0.96);
   border: 1px solid rgba(247, 199, 106, 0.45);
   border-radius: 8px;
   z-index: 10;

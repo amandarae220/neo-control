@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
 import LandingPage from "./pages/LandingPage";
 import GameCanvas from "./game/GameCanvas";
 import MissionSelectPage from "./pages/MissionSelectPage";
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/mission/:id" element={<MissionPage />} />
         <Route path="/results" element={<ResultsPage />} />
       </Routes>
+      <Analytics />
     </BrowserRouter>
   );
 }
