@@ -1339,14 +1339,6 @@ button:disabled {
 }
 
 /* ── briefing choice overlay (centered over canvas) ── */
-.touch-group-label {
-  margin: 0;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 0.65rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
 
 .touch-row {
   display: flex;
@@ -1378,19 +1370,20 @@ button:disabled {
 }
 
 .touch-btn-choice {
-  min-width: 110px;
-  height: 64px;
-  background: rgba(247, 199, 106, 0.1);
-  border-color: rgba(247, 199, 106, 0.45);
+  min-width: 52px;
+  height: 40px;
+  padding: 0 14px;
+  background: rgba(247, 199, 106, 0.07);
+  border-color: rgba(247, 199, 106, 0.35);
   color: var(--amber);
-  font-size: 1.6rem;
-  letter-spacing: 0.06em;
-  text-shadow: 0 0 12px rgba(247, 199, 106, 0.5);
-  border-radius: 4px;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 8px rgba(247, 199, 106, 0.4);
+  border-radius: 3px;
 }
 
 .touch-btn-choice:active {
-  background: rgba(247, 199, 106, 0.28);
+  background: rgba(247, 199, 106, 0.2);
   border-color: var(--amber);
 }
 
@@ -1605,16 +1598,12 @@ button:disabled {
 .touch-choice-overlay {
   display: none;
   position: absolute;
-  bottom: 4%;
+  bottom: 8%;
   left: 50%;
   transform: translateX(-50%);
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 12px;
-  padding: 16px 28px 20px;
-  background: rgba(4, 5, 14, 0.96);
-  border: 1px solid rgba(247, 199, 106, 0.45);
-  border-radius: 8px;
+  gap: 16px;
   z-index: 10;
 }
 

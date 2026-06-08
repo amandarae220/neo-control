@@ -1058,8 +1058,8 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
     if (text.length > 0) {
       let color = C.green;
       if      (text.startsWith('>>>'))  color = C.amber;
-      else if (text.startsWith('[1]'))  color = C.cyan;
-      else if (text.startsWith('[2]'))  color = C.pink;
+      else if (text.startsWith('[1]'))  color = C.amber;
+      else if (text.startsWith('[2]'))  color = C.amber;
       ctx.fillStyle = color;
       ctx.fillText(text, lx, lineY);
     }
@@ -1108,7 +1108,7 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
   ctx.textAlign = 'center';
   ctx.lineWidth = 1;
 
-  if (gs.txDone && gs.txHasChoice) {
+  if (gs.txDone && gs.txHasChoice && !isTouch) {
     const btnH = 28, btnW = 82, gap = 10;
     const bx1  = W / 2 - btnW - gap / 2;
     const bx2  = W / 2 + gap / 2;
@@ -1125,6 +1125,9 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
     ctx.strokeRect(bx2, by, btnW, btnH);
     ctx.fillStyle = C.pink;
     ctx.fillText('[ 2 ]', bx2 + btnW / 2, by + 20);
+
+  } else if (gs.txDone && gs.txHasChoice) {
+    // touch: DOM overlay handles choice — draw nothing in footer
 
   } else if (gs.txDone) {
     const btnH = 28, btnW = 172;
@@ -1711,7 +1714,6 @@ export default function GameCanvas() {
             <button ref={lbRetryRef} className="lb-retry-btn">► PLAY AGAIN</button>
           </div>
           <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
-            <p className="touch-group-label">Choose your route</p>
             <div className="touch-row">
               <button
                 className="touch-btn touch-btn-choice"
