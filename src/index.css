@@ -1388,19 +1388,43 @@ button:disabled {
   gap: 8px;
 }
 
+.lb-callsign-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .lb-input {
   background: rgba(0, 229, 255, 0.06);
   border: 1px solid rgba(0, 229, 255, 0.4);
   color: var(--cyan);
   font-family: var(--mono);
-  font-size: 1.6rem;
-  letter-spacing: 0.3em;
+  font-size: 1.3rem;
+  letter-spacing: 0.18em;
   text-align: center;
   text-transform: uppercase;
-  padding: 6px 14px;
-  width: 160px;
+  padding: 6px 10px;
+  width: 170px;
   border-radius: 2px;
   outline: none;
+}
+
+.lb-random-btn {
+  background: rgba(0, 229, 255, 0.06);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  color: var(--cyan);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 6px 9px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  flex-shrink: 0;
+}
+
+.lb-random-btn:hover {
+  background: rgba(0, 229, 255, 0.14);
+  border-color: var(--cyan);
 }
 
 .lb-input::placeholder {

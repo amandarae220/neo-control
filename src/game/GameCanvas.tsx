@@ -3,6 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { submitScore, fetchTopScores } from '../lib/scores';
 
+/* ── callsign generator ──────────────────────────────────────────────── */
+const CALL_PREFIX = [
+  'NOVA', 'STAR', 'DARK', 'VOID', 'IRON', 'NEON', 'FLUX',
+  'SOLAR', 'COMET', 'ORBIT', 'LUNAR', 'CYBER', 'ULTRA', 'STORM',
+];
+const CALL_SUFFIX = [
+  'WOLF', 'HAWK', 'ACE', 'FOX', 'REX',
+  'VEGA', 'VIPER', 'GHOST', 'BLADE', 'LANCE',
+];
+function randomCallsign(): string {
+  const p = CALL_PREFIX[Math.floor(Math.random() * CALL_PREFIX.length)];
+  const s = CALL_SUFFIX[Math.floor(Math.random() * CALL_SUFFIX.length)];
+  return `${p} ${s}`;
+}
+
 /* ── canvas dimensions ───────────────────────────────────────────────── */
 const W = 420;
 const H = 560;
@@ -1147,6 +1162,7 @@ export default function GameCanvas() {
   const lbListRef        = useRef<HTMLOListElement>(null);
   const lbSubmitRef      = useRef<HTMLButtonElement>(null);
   const lbRetryRef       = useRef<HTMLButtonElement>(null);
+  const lbRandomRef      = useRef<HTMLButtonElement>(null);
   const lbCapturedRef    = useRef({ score: 0, wave: 1 });
   // desktop panel refs
   const deskScoreRef     = useRef<HTMLSpanElement>(null);
@@ -1208,7 +1224,7 @@ export default function GameCanvas() {
       submitBtn.disabled = true;
       submitBtn.textContent = 'SUBMITTING…';
 
-      const name  = (lbInputRef.current?.value.trim().toUpperCase().slice(0, 6)) || 'PILOT';
+      const name  = (lbInputRef.current?.value.trim().toUpperCase().slice(0, 12)) || 'PILOT';
       const { score, wave } = lbCapturedRef.current;
 
       await submitScore(name, score, wave);
@@ -1237,13 +1253,19 @@ export default function GameCanvas() {
       gsRef.current = newGame(1, 0, gsRef.current.hi, 3);
     };
 
+    const handleRandomize = () => {
+      if (lbInputRef.current) lbInputRef.current.value = randomCallsign();
+    };
+
     const submitEl = lbSubmitRef.current!;
     const inputEl  = lbInputRef.current!;
     const retryEl  = lbRetryRef.current!;
+    const randomEl = lbRandomRef.current!;
 
     submitEl.addEventListener('click', handleLbSubmit);
     inputEl.addEventListener('keydown', handleLbKey);
     retryEl.addEventListener('click', handleRetry);
+    randomEl.addEventListener('click', handleRandomize);
 
     let last = performance.now();
     let raf  = 0;
@@ -1306,6 +1328,7 @@ export default function GameCanvas() {
         if (g.phase === 'over' && lbOverlayRef.current.style.display === 'none') {
           lbCapturedRef.current = { score: g.score, wave: g.wave };
           if (lbScoreRef.current) lbScoreRef.current.textContent = g.score.toLocaleString();
+          if (lbInputRef.current) lbInputRef.current.value = randomCallsign();
           if (!supabase && lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'none';
           lbOverlayRef.current.style.display = 'flex';
         }
@@ -1332,6 +1355,7 @@ export default function GameCanvas() {
       submitEl.removeEventListener('click', handleLbSubmit);
       inputEl.removeEventListener('keydown', handleLbKey);
       retryEl.removeEventListener('click', handleRetry);
+      randomEl.removeEventListener('click', handleRandomize);
     };
   }, [navigate]);
 
@@ -1397,7 +1421,10 @@ export default function GameCanvas() {
             </div>
             <div ref={lbNameSectionRef} className="lb-name-section">
               <p className="lb-label">ENTER CALLSIGN</p>
-              <input ref={lbInputRef} className="lb-input" maxLength={6} placeholder="PILOT" autoComplete="off" />
+              <div className="lb-callsign-row">
+                <input ref={lbInputRef} className="lb-input" maxLength={12} placeholder="NOVA WOLF" autoComplete="off" spellCheck={false} />
+                <button ref={lbRandomRef} className="lb-random-btn" type="button" title="Generate random callsign">↻</button>
+              </div>
               <button ref={lbSubmitRef} className="lb-submit-btn">SUBMIT SCORE</button>
             </div>
             <div ref={lbBoardRef} className="lb-board" style={{ display: 'none' }}>
