@@ -299,6 +299,7 @@ interface GS {
   txHasChoice:   boolean;
   txProfiles:    [PhysicsProfile, PhysicsProfile] | null;
   txChoiceTimer: number;
+  txScroll:      number;
   missionKind:     'approach' | 'eliminate';
   stationProgress: number;
   dockSeq:         boolean;
@@ -472,7 +473,7 @@ function newGame(
     spawnRockT: 5 + Math.random() * 3,
     planets: [], spawnPlanetT: 6,
     txLines: [], txLine: 0, txCh: 0, txDone: false, txWait: 0,
-    txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0,
+    txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0, txScroll: 0,
     missionKind:     wave === 1 ? 'approach' : 'eliminate',
     stationProgress: 0,
     dockSeq:         false,
@@ -747,7 +748,7 @@ function update(gs: GS, dt: number) {
       gs.txHasChoice  = !!brief.profiles;
       gs.txProfiles   = brief.profiles ?? null;
       gs.txChoiceTimer = 0;
-      gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0;
+      gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0; gs.txScroll = 0;
     }
     tickStars(gs, dt); tickSparks(gs, dt); tickPlanets(gs, dt);
     return;
@@ -986,17 +987,30 @@ function drawPlanet(ctx: CanvasRenderingContext2D, planet: Planet) {
 }
 
 /* ── brief overlay ───────────────────────────────────────────────────── */
-const TX_PAD = 14;
-const TX_TOP = 56;
-const TX_LH  = 20;
+const TX_PAD    = 8;
+const TX_TOP    = 56;
+const TX_LH     = 20;
+const TX_FOOTER = 44; // height reserved for footer button area
+
+function briefScrollBounds(gs: GS) {
+  const bh        = H - TX_TOP - 36;
+  const clipTop   = TX_TOP + 26;
+  const clipH     = bh - 26 - TX_FOOTER;
+  const ly        = TX_TOP + 40;
+  const maxScroll = Math.max(0, (ly + gs.txLines.length * TX_LH) - (clipTop + clipH));
+  const arrowW    = 130, arrowH = 32;
+  const arrowX    = W / 2 - arrowW / 2;
+  const arrowY    = clipTop + clipH - arrowH;
+  return { maxScroll, clipTop, clipH, arrowX, arrowY, arrowW, arrowH };
+}
 
 function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
   const bw = W - TX_PAD * 2;
   const bh = H - TX_TOP - 36;
 
+  // box
   ctx.fillStyle = 'rgba(7,6,14,0.93)';
   ctx.fillRect(TX_PAD, TX_TOP, bw, bh);
-
   ctx.strokeStyle = gs.txHasChoice ? C.amber : C.green;
   ctx.lineWidth   = 1;
   ctx.strokeRect(TX_PAD, TX_TOP, bw, bh);
@@ -1007,65 +1021,104 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
     : gs.txHasChoice
       ? '── COMMAND DECISION REQUIRED ──'
       : '── INCOMING TRANSMISSION ──';
-
   ctx.font      = "15px 'VT323', monospace";
   ctx.textAlign = 'center';
   ctx.fillStyle = gs.txHasChoice ? C.amber : C.muted;
   ctx.fillText(header, W / 2, TX_TOP + 16);
-
   ctx.strokeStyle = 'rgba(122,112,136,0.35)';
   ctx.beginPath();
   ctx.moveTo(TX_PAD + 6, TX_TOP + 22);
   ctx.lineTo(TX_PAD + bw - 6, TX_TOP + 22);
   ctx.stroke();
 
-  // content lines
-  const lx = TX_PAD + 10;
-  const ly = TX_TOP + 40;
+  // scroll metrics
+  const { maxScroll, clipTop, clipH, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(gs);
+  const scroll      = Math.min(gs.txScroll, maxScroll);
+  const hasOverflow = maxScroll > 0;
+  const atBottom    = scroll >= maxScroll - 1;
+  const lx          = TX_PAD + 10;
+  const ly          = TX_TOP + 40;
+
+  // clip content to text area
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(TX_PAD + 1, clipTop, bw - 2, clipH);
+  ctx.clip();
+
   ctx.font      = "15px 'VT323', monospace";
   ctx.textAlign = 'left';
-
   for (let i = 0; i < gs.txLines.length; i++) {
     if (i > gs.txLine) break;
+    const lineY     = ly + i * TX_LH - scroll;
+    if (lineY < clipTop - TX_LH) continue;
+    if (lineY > clipTop + clipH + TX_LH) break;
     const full      = gs.txLines[i];
     const isCurrent = i === gs.txLine;
     const text      = (isCurrent && !gs.txDone) ? full.slice(0, Math.floor(gs.txCh)) : full;
-
     if (text.length > 0) {
       let color = C.green;
       if      (text.startsWith('>>>'))  color = C.amber;
       else if (text.startsWith('[1]'))  color = C.cyan;
       else if (text.startsWith('[2]'))  color = C.pink;
       ctx.fillStyle = color;
-      ctx.fillText(text, lx, ly + i * TX_LH);
+      ctx.fillText(text, lx, lineY);
     }
-
     if (isCurrent && !gs.txDone && Math.sin(t * 9) > 0) {
       const tw = text.length > 0 ? ctx.measureText(text).width : 0;
       ctx.fillStyle = C.green;
-      ctx.fillRect(lx + tw + 1, ly + i * TX_LH - 13, 7, 14);
+      ctx.fillRect(lx + tw + 1, lineY - 13, 7, 14);
     }
   }
+  ctx.restore();
 
-  // footer buttons
+  // gradient fade + scroll arrow (only when more content is hidden below)
+  if (hasOverflow && !atBottom) {
+    // gradient fade blending into the arrow area
+    const grad = ctx.createLinearGradient(0, arrowY - 20, 0, arrowY);
+    grad.addColorStop(0, 'rgba(7,6,14,0)');
+    grad.addColorStop(1, 'rgba(7,6,14,1)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(TX_PAD + 1, arrowY - 20, bw - 2, 20);
+
+    // solid background so no text bleeds through
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(TX_PAD + 1, arrowY, bw - 2, arrowH);
+
+    // pulsing arrow button
+    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 4);
+    ctx.fillStyle   = 'rgba(247,199,106,0.10)';
+    ctx.fillRect(arrowX, arrowY + 2, arrowW, arrowH - 4);
+    ctx.strokeStyle = C.amber;
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(arrowX, arrowY + 2, arrowW, arrowH - 4);
+    ctx.fillStyle   = C.amber;
+    ctx.font        = "15px 'VT323', monospace";
+    ctx.textAlign   = 'center';
+    ctx.fillText('MORE  ↓', W / 2, arrowY + arrowH - 7);
+    ctx.globalAlpha = 1;
+  }
+
+  // footer — solid background prevents any text bleeding through
+  const footerTop = TX_TOP + bh - TX_FOOTER;
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(TX_PAD + 1, footerTop, bw - 2, TX_FOOTER);
+
+  const btnBottom = TX_TOP + bh - 8;
   ctx.font      = "15px 'VT323', monospace";
   ctx.textAlign = 'center';
   ctx.lineWidth = 1;
-  const btnBottom = TX_TOP + bh - 8;
 
   if (gs.txDone && gs.txHasChoice) {
     const btnH = 28, btnW = 82, gap = 10;
     const bx1  = W / 2 - btnW - gap / 2;
     const bx2  = W / 2 + gap / 2;
     const by   = btnBottom - btnH;
-
     ctx.fillStyle = 'rgba(0,229,255,0.10)';
     ctx.fillRect(bx1, by, btnW, btnH);
     ctx.strokeStyle = C.cyan;
     ctx.strokeRect(bx1, by, btnW, btnH);
     ctx.fillStyle = C.cyan;
     ctx.fillText('[ 1 ]', bx1 + btnW / 2, by + 20);
-
     ctx.fillStyle = 'rgba(255,79,216,0.10)';
     ctx.fillRect(bx2, by, btnW, btnH);
     ctx.strokeStyle = C.pink;
@@ -1427,6 +1480,22 @@ export default function GameCanvas() {
     retryEl.addEventListener('click', handleRetry);
     randomEl.addEventListener('click', handleRandomize);
 
+    // ── scroll arrow click (desktop mouse) ──────────────────────────────
+    const handleBriefClick = (e: MouseEvent) => {
+      const g = gsRef.current;
+      if (g.phase !== 'brief') return;
+      const rect = canvas.getBoundingClientRect();
+      const cx = (e.clientX - rect.left) * (W / rect.width);
+      const cy = (e.clientY - rect.top)  * (H / rect.height);
+      const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(g);
+      if (maxScroll > 0 && g.txScroll < maxScroll - 1
+          && cx >= arrowX && cx <= arrowX + arrowW
+          && cy >= arrowY && cy <= arrowY + arrowH) {
+        g.txScroll = maxScroll;
+      }
+    };
+    canvas.addEventListener('click', handleBriefClick);
+
     let last    = performance.now();
     let raf     = 0;
     let mounted = true;
@@ -1496,9 +1565,11 @@ export default function GameCanvas() {
         hudControlsRef.current.style.display = g.phase === 'play' ? 'flex' : 'none';
       }
 
-      // briefing choice overlay — touch only, shown only when a choice is pending
+      // briefing choice overlay — touch only, shown only when at bottom of scrollable content
       if (choiceOverlayRef.current) {
-        const showChoices = isTouch && g.phase === 'brief' && g.txDone && g.txHasChoice;
+        const { maxScroll } = briefScrollBounds(g);
+        const atBottom      = maxScroll <= 0 || g.txScroll >= maxScroll - 1;
+        const showChoices   = isTouch && g.phase === 'brief' && g.txDone && g.txHasChoice && atBottom;
         choiceOverlayRef.current.style.display = showChoices ? 'flex' : 'none';
       }
 
@@ -1538,6 +1609,7 @@ export default function GameCanvas() {
       inputEl.removeEventListener('keydown', handleLbKey);
       retryEl.removeEventListener('click', handleRetry);
       randomEl.removeEventListener('click', handleRandomize);
+      canvas.removeEventListener('click', handleBriefClick);
     };
   }, [navigate]);
 
@@ -1569,8 +1641,21 @@ export default function GameCanvas() {
             ref={canvasRef}
             width={W} height={H}
             className="game-canvas"
-            onTouchEnd={() => {
+            onTouchEnd={(e) => {
               const gs = gsRef.current;
+              if (gs.phase === 'brief') {
+                const touch = e.changedTouches[0];
+                const rect  = canvasRef.current!.getBoundingClientRect();
+                const cx = (touch.clientX - rect.left) * (W / rect.width);
+                const cy = (touch.clientY - rect.top)  * (H / rect.height);
+                const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(gs);
+                if (maxScroll > 0 && gs.txScroll < maxScroll - 1
+                    && cx >= arrowX && cx <= arrowX + arrowW
+                    && cy >= arrowY && cy <= arrowY + arrowH) {
+                  gs.txScroll = maxScroll;
+                  return;
+                }
+              }
               gs.keys.add(' ');
               setTimeout(() => gs.keys.delete(' '), 80);
             }}
