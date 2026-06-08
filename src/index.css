@@ -1296,7 +1296,7 @@ button:disabled {
 
 .touch-row {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
 }
 
@@ -1324,17 +1324,20 @@ button:disabled {
 }
 
 .touch-btn-choice {
-  min-width: 52px;
-  height: 52px;
+  min-width: 110px;
+  height: 64px;
   background: rgba(247, 199, 106, 0.1);
-  border-color: rgba(247, 199, 106, 0.38);
+  border-color: rgba(247, 199, 106, 0.45);
   color: var(--amber);
-  font-size: 1.1rem;
-  text-shadow: 0 0 10px rgba(247, 199, 106, 0.4);
+  font-size: 1.6rem;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 12px rgba(247, 199, 106, 0.5);
+  border-radius: 4px;
 }
 
 .touch-btn-choice:active {
-  background: rgba(247, 199, 106, 0.26);
+  background: rgba(247, 199, 106, 0.28);
+  border-color: var(--amber);
 }
 
 /* ── leaderboard overlay ── */
@@ -1437,16 +1440,29 @@ button:disabled {
 }
 
 .lb-submit-btn {
-  background: rgba(102, 242, 165, 0.08);
-  border: 1px solid rgba(102, 242, 165, 0.45);
+  background: rgba(102, 242, 165, 0.12);
+  border: 1px solid rgba(102, 242, 165, 0.55);
   color: var(--green);
   font-family: var(--mono);
-  font-size: 0.82rem;
+  font-size: 1rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  padding: 7px 22px;
+  padding: 12px 32px;
+  min-height: 48px;
   cursor: pointer;
   border-radius: 2px;
+  width: 100%;
+  max-width: 220px;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.lb-submit-btn:hover {
+  background: rgba(102, 242, 165, 0.22);
+  border-color: var(--green);
+}
+
+.lb-submit-btn:active {
+  background: rgba(102, 242, 165, 0.32);
 }
 
 .lb-submit-btn:disabled {
@@ -1505,36 +1521,40 @@ button:disabled {
 }
 
 .lb-retry-btn {
-  background: transparent;
-  border: 1px solid rgba(247, 199, 106, 0.4);
+  background: rgba(247, 199, 106, 0.08);
+  border: 1px solid rgba(247, 199, 106, 0.45);
   color: var(--amber);
   font-family: var(--mono);
-  font-size: 0.82rem;
+  font-size: 1rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  padding: 7px 22px;
+  padding: 12px 32px;
+  min-height: 48px;
   cursor: pointer;
   border-radius: 2px;
   margin-top: 4px;
+  width: 100%;
+  max-width: 220px;
+  transition: background 0.12s, border-color 0.12s;
 }
 
 .lb-retry-btn:active,
 .lb-retry-btn:hover {
-  background: rgba(247, 199, 106, 0.1);
+  background: rgba(247, 199, 106, 0.18);
   border-color: var(--amber);
 }
 
 .touch-choice-overlay {
   display: none;
   position: absolute;
-  bottom: 5%;
+  bottom: 4%;
   left: 50%;
   transform: translateX(-50%);
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 16px 24px 18px;
-  background: rgba(4, 5, 14, 0.94);
+  gap: 12px;
+  padding: 16px 28px 20px;
+  background: rgba(4, 5, 14, 0.96);
   border: 1px solid rgba(247, 199, 106, 0.45);
   border-radius: 8px;
   z-index: 10;

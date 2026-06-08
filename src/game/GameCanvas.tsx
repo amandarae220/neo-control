@@ -67,9 +67,9 @@ interface WaveBrief {
 const INTRO_TRANSMISSION: string[] = [
   '>>> NEO CONTROL  //  INCOMING TRANSMISSION',
   '',
-  'CADET. THIS IS NEO CONTROL.',
+  'SPACE CADET. THIS IS NEO CONTROL.',
   '',
-  'TODAY: ROUTINE SUPPLY RUN TO NEO-7.',
+  'TODAY\'S OBJECTIVE: ROUTINE SUPPLY RUN TO NEO-7.',
   'THE AUTOPILOT IS BROKEN, WHICH IS',
   'THE ONLY REASON WE CALLED YOU.',
   '',
@@ -91,8 +91,8 @@ const TRANSMISSIONS: WaveBrief[] = [
       '',
       'YOU\'VE ENTERED SECTOR 7-G WITHOUT',
       'TRANSIT CLEARANCE. THOSE DRONES',
-      'WERE TRAFFIC ENFORCEMENT — YOU',
-      'DESTROYED ELEVEN. IT\'S ALL ON',
+      'WERE TRAFFIC ENFORCEMENT... YOU',
+      'DESTROYED ELEVEN... AND IT\'S ALL ON',
       'SECURITY FOOTAGE. THEY\'VE ESCALATED',
       'TO THE GALACTIC TRANSIT AUTHORITY.',
       '',
@@ -115,7 +115,7 @@ const TRANSMISSIONS: WaveBrief[] = [
     lines: [
       '>>> NEO CONTROL  //  REROUTING',
       '',
-      'CADET.',
+      'SPACE CADET.',
       '',
       'DUE TO THE SECTOR 7-G INCIDENT,',
       'YOUR STANDARD RETURN PATH IS NOW',
@@ -141,7 +141,7 @@ const TRANSMISSIONS: WaveBrief[] = [
     lines: [
       '>>> NEO CONTROL  //  INTEL UPDATE',
       '',
-      'CADET.',
+      'SPACE CADET.',
       '',
       'FORMAL COMPLAINTS RECEIVED FROM',
       'THE GTA, TWO MERCENARY GUILDS,',
@@ -169,7 +169,7 @@ const TRANSMISSIONS: WaveBrief[] = [
     lines: [
       '>>> NEO CONTROL  //  MEDIA ALERT',
       '',
-      'CADET. YOU\'RE ON THE NEWS.',
+      'SPACECADET. YOU\'RE ON THE NEWS.',
       '',
       'HEADLINE: "UNIDENTIFIED SHIP',
       'TERRORIZES OUTER SECTORS —',
@@ -187,7 +187,7 @@ const TRANSMISSIONS: WaveBrief[] = [
     lines: [
       '>>> [OPEN CHANNEL]  NEO CONTROL',
       '',
-      'CADET.',
+      'SPACE CADET.',
       '',
       'YOU KNOW WHAT YOU\'RE DOING BY NOW.',
       'OR YOU DON\'T AND IT\'S WORKING.',
@@ -765,21 +765,8 @@ function update(gs: GS, dt: number) {
           gs.txCh   = gs.txLines[gs.txLine].length;
         }
       }
-    } else {
-      if (gs.txHasChoice) {
-        gs.txChoiceTimer += dt;
-        if (gs.txChoiceTimer >= 12) {
-          // auto-select option 1 after 12 seconds
-          Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles![0]));
-        }
-      } else {
-        gs.txWait += dt;
-        if (gs.txWait >= 4) {
-          if (gs.txIsIntro) gs.phase = 'play';
-          else Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile));
-        }
-      }
     }
+    // player must actively continue — no auto-advance
     tickStars(gs, dt); tickPlanets(gs, dt);
     return;
   }
@@ -1059,29 +1046,53 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
     }
   }
 
-  // footer
-  ctx.font      = "14px 'VT323', monospace";
+  // footer buttons
+  ctx.font      = "15px 'VT323', monospace";
   ctx.textAlign = 'center';
+  ctx.lineWidth = 1;
+  const btnBottom = TX_TOP + bh - 8;
+
   if (gs.txDone && gs.txHasChoice) {
-    const remaining = Math.ceil(12 - gs.txChoiceTimer);
-    if (Math.sin(t * 3) > 0) {
-      ctx.fillStyle = C.amber;
-      ctx.fillText(
-        isTouch ? `[ AUTO: ${remaining}s ]` : `PRESS 1 OR 2  [ AUTO: ${remaining}s ]`,
-        W / 2, TX_TOP + bh - 10,
-      );
-    }
+    const btnH = 28, btnW = 82, gap = 10;
+    const bx1  = W / 2 - btnW - gap / 2;
+    const bx2  = W / 2 + gap / 2;
+    const by   = btnBottom - btnH;
+
+    ctx.fillStyle = 'rgba(0,229,255,0.10)';
+    ctx.fillRect(bx1, by, btnW, btnH);
+    ctx.strokeStyle = C.cyan;
+    ctx.strokeRect(bx1, by, btnW, btnH);
+    ctx.fillStyle = C.cyan;
+    ctx.fillText('[ 1 ]', bx1 + btnW / 2, by + 20);
+
+    ctx.fillStyle = 'rgba(255,79,216,0.10)';
+    ctx.fillRect(bx2, by, btnW, btnH);
+    ctx.strokeStyle = C.pink;
+    ctx.strokeRect(bx2, by, btnW, btnH);
+    ctx.fillStyle = C.pink;
+    ctx.fillText('[ 2 ]', bx2 + btnW / 2, by + 20);
+
   } else if (gs.txDone) {
-    if (Math.sin(t * 3) > 0) {
-      ctx.fillStyle = C.muted;
-      ctx.fillText(
-        isTouch ? '[ TAP TO CONTINUE ]' : '[ SPACE TO CONTINUE ]',
-        W / 2, TX_TOP + bh - 10,
-      );
-    }
+    const btnH = 28, btnW = 172;
+    const bx   = W / 2 - btnW / 2;
+    const by   = btnBottom - btnH;
+    ctx.fillStyle = 'rgba(102,242,165,0.10)';
+    ctx.fillRect(bx, by, btnW, btnH);
+    ctx.strokeStyle = C.green;
+    ctx.strokeRect(bx, by, btnW, btnH);
+    ctx.fillStyle = C.green;
+    ctx.fillText(isTouch ? 'TAP TO CONTINUE' : 'SPACE TO CONTINUE', W / 2, by + 20);
+
   } else {
-    ctx.fillStyle = 'rgba(122,112,136,0.5)';
-    ctx.fillText(isTouch ? 'TAP TO SKIP' : 'SPACE TO SKIP', W / 2, TX_TOP + bh - 10);
+    const btnH = 24, btnW = 130;
+    const bx   = W / 2 - btnW / 2;
+    const by   = btnBottom - btnH;
+    ctx.fillStyle = 'rgba(122,112,136,0.07)';
+    ctx.fillRect(bx, by, btnW, btnH);
+    ctx.strokeStyle = 'rgba(122,112,136,0.28)';
+    ctx.strokeRect(bx, by, btnW, btnH);
+    ctx.fillStyle = 'rgba(122,112,136,0.6)';
+    ctx.fillText(isTouch ? 'TAP TO SKIP' : 'SPACE TO SKIP', W / 2, by + 17);
   }
   ctx.textAlign = 'left';
 }
