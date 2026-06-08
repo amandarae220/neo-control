@@ -229,7 +229,7 @@ const TRANSMISSIONS: WaveBrief[] = [
 ];
 
 /* ── types ───────────────────────────────────────────────────────────── */
-type Phase  = 'play' | 'die' | 'over' | 'brief';
+type Phase  = 'play' | 'die' | 'over' | 'brief' | 'intro' | 'jump';
 type EK     = 0 | 1 | 2;          // 0 = rock · 1 = alien · 2 = boss
 type EMove  = 'drift' | 'sweep' | 'swoop' | 'chase';
 
@@ -301,6 +301,11 @@ interface GS {
   txChoiceTimer: number;
   txScroll:      number;
   paused:        boolean;
+  introT:              number;
+  jumpT:               number;
+  gravitySurgeTimer:   number;
+  gravitySurgeActive:  boolean;
+  gravitySurgeWarn:    boolean;
   missionKind:     'approach' | 'eliminate';
   stationProgress: number;
   dockSeq:         boolean;
@@ -475,6 +480,7 @@ function newGame(
     planets: [], spawnPlanetT: 6,
     txLines: [], txLine: 0, txCh: 0, txDone: false, txWait: 0,
     txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0, txScroll: 0, paused: false,
+    introT: 0, jumpT: 0, gravitySurgeTimer: 0, gravitySurgeActive: false, gravitySurgeWarn: false,
     missionKind:     wave === 1 ? 'approach' : 'eliminate',
     stationProgress: 0,
     dockSeq:         false,
@@ -578,6 +584,7 @@ function tickGravRocks(gs: GS, dt: number) {
   });
   gs.bullets = gs.bullets.filter(b => !usedB.has(b.id));
 
+  const surgeMult = gs.gravitySurgeActive ? 3.5 : 1;
   gs.gravRocks = gs.gravRocks.filter(rock => {
     rock.x += rock.vx * dt; rock.y += rock.vy * dt;
     if (rock.x < -80 || rock.x > W + 80 || rock.y < -80 || rock.y > H + 80) return false;
@@ -591,7 +598,7 @@ function tickGravRocks(gs: GS, dt: number) {
       const dx = rock.x - b.x, dy = rock.y - b.y;
       const dist = Math.sqrt(dx * dx + dy * dy) || 1;
       if (dist < rock.radius) {
-        const f = rock.mass * (1 - dist / rock.radius) / dist;
+        const f = rock.mass * surgeMult * (1 - dist / rock.radius) / dist;
         b.vx += dx * f * dt; b.vy += dy * f * dt;
       }
     });
@@ -599,7 +606,7 @@ function tickGravRocks(gs: GS, dt: number) {
     const pdx = rock.x - gs.px, pdy = rock.y - PY;
     const pd  = Math.sqrt(pdx * pdx + pdy * pdy) || 1;
     if (pd < rock.radius) {
-      const f = rock.mass * 0.15 * (1 - pd / rock.radius) / pd;
+      const f = rock.mass * 0.15 * surgeMult * (1 - pd / rock.radius) / pd;
       gs.px += pdx * f * dt;
       gs.px  = Math.max(14, Math.min(W - 14, gs.px));
     }
@@ -727,6 +734,19 @@ function killPlayer(gs: GS) {
 
 
 function update(gs: GS, dt: number) {
+  /* ── intro cinematic ── */
+  if (gs.phase === 'intro') {
+    gs.introT += dt;
+    const speedMult = Math.max(1, 12 - 10 * (gs.introT / 2.5));
+    gs.stars.forEach(s => {
+      s.y += (0.5 + s.s * 0.25) * dt * 30 * speedMult;
+      if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
+    });
+    tickSparks(gs, dt);
+    if (gs.introT >= 2.5) gs.phase = 'play';
+    return;
+  }
+
   /* ── death pause ── */
   if (gs.phase === 'die') {
     gs.dieT -= dt;
@@ -738,10 +758,39 @@ function update(gs: GS, dt: number) {
     return;
   }
 
-  /* ── wave clear pause → brief ── */
+  /* ── wave clear pause → jump/brief ── */
   if (gs.waveT > 0) {
     gs.waveT -= dt;
     if (gs.waveT <= 0) {
+      if (gs.missionKind === 'eliminate') {
+        gs.phase = 'jump';
+        gs.jumpT = 0;
+        gs.px    = W / 2;
+      } else {
+        gs.phase = 'brief';
+        const idx   = Math.min(gs.wave - 1, TRANSMISSIONS.length - 1);
+        const brief = TRANSMISSIONS[idx];
+        gs.txLines      = brief.lines;
+        gs.txHasChoice  = !!brief.profiles;
+        gs.txProfiles   = brief.profiles ?? null;
+        gs.txChoiceTimer = 0;
+        gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0; gs.txScroll = 0;
+      }
+    }
+    tickStars(gs, dt); tickSparks(gs, dt); tickPlanets(gs, dt);
+    return;
+  }
+
+  /* ── hyperspace jump (eliminate wave exit) ── */
+  if (gs.phase === 'jump') {
+    gs.jumpT += dt;
+    gs.px += (W / 2 - gs.px) * Math.min(1, dt * 4);
+    gs.stars.forEach(s => {
+      s.y += (0.5 + s.s * 0.25) * dt * 30 * 14;
+      if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
+    });
+    tickSparks(gs, dt);
+    if (gs.jumpT >= 2.0) {
       gs.phase = 'brief';
       const idx   = Math.min(gs.wave - 1, TRANSMISSIONS.length - 1);
       const brief = TRANSMISSIONS[idx];
@@ -751,7 +800,6 @@ function update(gs: GS, dt: number) {
       gs.txChoiceTimer = 0;
       gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0; gs.txScroll = 0;
     }
-    tickStars(gs, dt); tickSparks(gs, dt); tickPlanets(gs, dt);
     return;
   }
 
@@ -931,6 +979,18 @@ function update(gs: GS, dt: number) {
   }
 
   if (!gs.dockSeq) {
+    if (gs.activeProfile.gravMass > 1.5) {
+      const SURGE_CYCLE = 22, WARN_DUR = 3, SURGE_DUR = 4;
+      gs.gravitySurgeTimer += dt;
+      const st = gs.gravitySurgeTimer;
+      gs.gravitySurgeWarn   = st >= SURGE_CYCLE && st < SURGE_CYCLE + WARN_DUR;
+      gs.gravitySurgeActive = st >= SURGE_CYCLE + WARN_DUR && st < SURGE_CYCLE + WARN_DUR + SURGE_DUR;
+      if (st >= SURGE_CYCLE + WARN_DUR + SURGE_DUR) {
+        gs.gravitySurgeTimer  = 0;
+        gs.gravitySurgeActive = false;
+        gs.gravitySurgeWarn   = false;
+      }
+    }
     tickUFO(gs, dt);
     tickGravRocks(gs, dt);
     tickPlanets(gs, dt);
@@ -1003,6 +1063,11 @@ function briefScrollBounds(gs: GS) {
   const arrowX    = W / 2 - arrowW / 2;
   const arrowY    = clipTop + clipH - arrowH;
   return { maxScroll, clipTop, clipH, arrowX, arrowY, arrowW, arrowH };
+}
+
+const SECTOR_NAMES = ['7-G', 'VELON-4', 'DELTA-9', 'KIRA BELT', 'VOID OUTPOST', 'DEEP SPACE'];
+function sectorName(wave: number): string {
+  return SECTOR_NAMES[Math.min(wave - 1, SECTOR_NAMES.length - 1)];
 }
 
 function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
@@ -1160,6 +1225,60 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, W, H);
 
+  if (gs.phase === 'intro') {
+    const progress    = Math.min(1, gs.introT / 2.5);
+    const streakFactor = 1 - progress;
+    gs.stars.forEach(({ x, y, s }) => {
+      const trailLen = Math.floor(streakFactor * 40 * s);
+      ctx.fillStyle  = s === 2 ? 'rgba(200,192,218,0.9)' : 'rgba(200,192,218,0.52)';
+      if (trailLen > 2) {
+        ctx.fillRect(Math.floor(x), Math.floor(y) - trailLen, s, trailLen + s);
+      } else {
+        ctx.fillRect(Math.floor(x), Math.floor(y), s, s);
+      }
+    });
+    if (progress > 0.45) {
+      const fadeIn      = Math.min(1, (progress - 0.45) / 0.3);
+      ctx.globalAlpha   = fadeIn;
+      ctx.textAlign     = 'center';
+      ctx.font          = "24px 'VT323', monospace";
+      ctx.fillStyle     = C.green;
+      ctx.fillText(`ENTERING SECTOR ${sectorName(gs.wave)}`, W / 2, H / 2 - 12);
+      ctx.font          = "15px 'VT323', monospace";
+      ctx.fillStyle     = C.muted;
+      ctx.fillText(`WAVE ${gs.wave}`, W / 2, H / 2 + 14);
+      ctx.globalAlpha   = 1;
+      ctx.textAlign     = 'left';
+    }
+    return;
+  }
+
+  if (gs.phase === 'jump') {
+    const progress = Math.min(1, gs.jumpT / 2.0);
+    gs.stars.forEach(({ x, y, s }) => {
+      const trailLen = s * 36;
+      ctx.fillStyle  = s === 2 ? 'rgba(200,192,218,0.9)' : 'rgba(200,192,218,0.52)';
+      ctx.fillRect(Math.floor(x), Math.floor(y) - trailLen, s, trailLen + s);
+    });
+    const jumpY = PY - progress * (PY + 50);
+    if (jumpY > -24) {
+      drawSpr(ctx, SPR.player, C.cyan, gs.px, jumpY);
+      drawSpr(ctx, SPR.thruster, C.pink, gs.px, jumpY + sprH(SPR.player) / 2 + PX, PX);
+      const trailH = Math.floor(progress * 80);
+      if (trailH > 0) {
+        ctx.globalAlpha = 0.25 + 0.2 * progress;
+        ctx.fillStyle   = C.pink;
+        ctx.fillRect(Math.floor(gs.px - 1), Math.floor(jumpY + sprH(SPR.player) / 2 + PX * 2), 2, trailH);
+        ctx.globalAlpha = 1;
+      }
+    }
+    if (progress > 0.7) {
+      ctx.fillStyle = `rgba(7,6,14,${((progress - 0.7) / 0.3).toFixed(3)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    return;
+  }
+
   gs.stars.forEach(({ x, y, s }) => {
     ctx.fillStyle = s === 2 ? 'rgba(200,192,218,0.9)' : 'rgba(200,192,218,0.42)';
     ctx.fillRect(Math.floor(x), Math.floor(y), s, s);
@@ -1312,6 +1431,22 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   }
 
   drawHUD(ctx, gs);
+
+  if (gs.gravitySurgeActive || gs.gravitySurgeWarn) {
+    const pulse   = 0.65 + 0.35 * Math.sin(t * (gs.gravitySurgeActive ? 10 : 4));
+    ctx.textAlign = 'center';
+    ctx.font      = "20px 'VT323', monospace";
+    ctx.fillStyle = C.amber;
+    ctx.globalAlpha = pulse;
+    ctx.fillText(gs.gravitySurgeActive ? '⚠ GRAVITY SURGE' : '⚠ SURGE IMMINENT', W / 2, 54);
+    if (gs.gravitySurgeActive) {
+      ctx.globalAlpha = 0.04;
+      ctx.fillStyle   = '#f7961e';
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign   = 'left';
+  }
 
   if (gs.paused) {
     ctx.fillStyle = 'rgba(7,6,14,0.78)';
@@ -1478,8 +1613,15 @@ export default function GameCanvas() {
           gs.txCh   = gs.txLines[gs.txLine].length;
           gs.txDone = true;
         } else if (!gs.txHasChoice) {
-          if (gs.txIsIntro) gs.phase = 'play';
-          else Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile));
+          if (gs.txIsIntro) {
+            gs.phase  = 'intro';
+            gs.introT = 0;
+          } else {
+            const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile);
+            ng.phase  = 'intro';
+            ng.introT = 0;
+            Object.assign(gs, ng);
+          }
         }
       }
 
@@ -1487,7 +1629,10 @@ export default function GameCanvas() {
         const gs = gsRef.current;
         if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
           const profile = gs.txProfiles[e.key === '1' ? 0 : 1];
-          Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, profile));
+          const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, profile);
+          ng.phase  = 'intro';
+          ng.introT = 0;
+          Object.assign(gs, ng);
         }
       }
 
@@ -1604,13 +1749,13 @@ export default function GameCanvas() {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
       const g = gsRef.current;
-      if (!g.paused && (g.phase === 'play' || g.phase === 'die' || g.phase === 'brief')) update(g, dt);
+      if (!g.paused && (g.phase === 'play' || g.phase === 'die' || g.phase === 'brief' || g.phase === 'intro' || g.phase === 'jump')) update(g, dt);
       else if (!g.paused) { tickStars(g, dt); tickSparks(g, dt); }
       render(ctx, g, now / 1000, isTouch);
 
       // ── analytics: fire once per state transition ──────────────────────
       const prevPhase = trackedPhaseRef.current;
-      if (g.phase === 'play' && prevPhase === 'brief' && trackedWaveRef.current === 0) {
+      if (g.phase === 'play' && (prevPhase === 'brief' || prevPhase === 'intro') && trackedWaveRef.current === 0) {
         track('game_start');
       }
       if (g.waveT > 0 && g.wave > trackedWaveRef.current) {
@@ -1639,7 +1784,7 @@ export default function GameCanvas() {
       }
 
       // desktop panels (DOM, no React re-render)
-      const playing = g.phase === 'play' || g.phase === 'die' || g.phase === 'brief' || g.phase === 'over';
+      const playing = g.phase === 'play' || g.phase === 'die' || g.phase === 'brief' || g.phase === 'intro' || g.phase === 'jump' || g.phase === 'over';
       if (deskScoreRef.current) deskScoreRef.current.textContent = g.score.toLocaleString();
       if (deskHiRef.current)    deskHiRef.current.textContent    = g.hi.toLocaleString();
       if (deskWaveRef.current)  deskWaveRef.current.textContent  = String(g.wave);
@@ -1774,8 +1919,15 @@ export default function GameCanvas() {
                   gs.txCh   = gs.txLines[gs.txLine].length;
                   gs.txDone = true;
                 } else if (!gs.txHasChoice) {
-                  if (gs.txIsIntro) gs.phase = 'play';
-                  else Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile));
+                  if (gs.txIsIntro) {
+                    gs.phase  = 'intro';
+                    gs.introT = 0;
+                  } else {
+                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile);
+                    ng.phase  = 'intro';
+                    ng.introT = 0;
+                    Object.assign(gs, ng);
+                  }
                 }
                 return;
               }
@@ -1882,7 +2034,10 @@ export default function GameCanvas() {
                 onTouchEnd={() => {
                   const gs = gsRef.current;
                   if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                    Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0]));
+                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0]);
+                    ng.phase  = 'intro';
+                    ng.introT = 0;
+                    Object.assign(gs, ng);
                   }
                 }}
               >[1]</button>
@@ -1891,7 +2046,10 @@ export default function GameCanvas() {
                 onTouchEnd={() => {
                   const gs = gsRef.current;
                   if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                    Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1]));
+                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1]);
+                    ng.phase  = 'intro';
+                    ng.introT = 0;
+                    Object.assign(gs, ng);
                   }
                 }}
               >[2]</button>
