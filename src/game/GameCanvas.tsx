@@ -1392,6 +1392,12 @@ export default function GameCanvas() {
     const canvas  = canvasRef.current!;
     const ctx     = canvas.getContext('2d')!;
     const isTouch = window.matchMedia('(pointer: coarse)').matches;
+    const dpr     = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width        = W * dpr;
+    canvas.height       = H * dpr;
+    canvas.style.width  = `${W}px`;
+    canvas.style.height = `${H}px`;
+    ctx.scale(dpr, dpr);
     ctx.imageSmoothingEnabled = false;
 
 
@@ -1641,20 +1647,24 @@ export default function GameCanvas() {
             ref={canvasRef}
             width={W} height={H}
             className="game-canvas"
-            onTouchEnd={(e) => {
+            onTouchEnd={() => {
               const gs = gsRef.current;
               if (gs.phase === 'brief') {
-                const touch = e.changedTouches[0];
-                const rect  = canvasRef.current!.getBoundingClientRect();
-                const cx = (touch.clientX - rect.left) * (W / rect.width);
-                const cy = (touch.clientY - rect.top)  * (H / rect.height);
-                const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(gs);
-                if (maxScroll > 0 && gs.txScroll < maxScroll - 1
-                    && cx >= arrowX && cx <= arrowX + arrowW
-                    && cy >= arrowY && cy <= arrowY + arrowH) {
+                const { maxScroll } = briefScrollBounds(gs);
+                const atBottom = maxScroll <= 0 || gs.txScroll >= maxScroll - 1;
+                if (!atBottom) {
                   gs.txScroll = maxScroll;
                   return;
                 }
+                if (!gs.txDone) {
+                  gs.txLine = gs.txLines.length - 1;
+                  gs.txCh   = gs.txLines[gs.txLine].length;
+                  gs.txDone = true;
+                } else if (!gs.txHasChoice) {
+                  if (gs.txIsIntro) gs.phase = 'play';
+                  else Object.assign(gs, newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile));
+                }
+                return;
               }
               gs.keys.add(' ');
               setTimeout(() => gs.keys.delete(' '), 80);
