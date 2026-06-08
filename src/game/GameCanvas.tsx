@@ -28,7 +28,9 @@ const PY = H - 52;       // player y center
 const P_SPD = 170;       // player move speed px/s
 const B_SPD = -300;      // player bullet speed px/s (up)
 const EB_SPD = 150;      // enemy bullet speed px/s (down)
-const MAX_BULLETS = 3;
+const MAX_BULLETS    = 3;
+const DOCK_TOL       = 44;   // px from center counted as aligned
+const DOCK_HOLD_TIME = 2.2;  // seconds to hold alignment for successful dock
 
 
 /* ── palette ─────────────────────────────────────────────────────────── */
@@ -297,6 +299,8 @@ interface GS {
   txChoiceTimer: number;
   missionKind:     'approach' | 'eliminate';
   stationProgress: number;
+  dockSeq:         boolean;
+  dockLock:        number;
   totalEnemies:    number;
   scoreLog:        ScoreEvent[];
   activeProfile:   PhysicsProfile;
@@ -468,6 +472,8 @@ function newGame(
     txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0,
     missionKind:     wave === 1 ? 'approach' : 'eliminate',
     stationProgress: 0,
+    dockSeq:         false,
+    dockLock:        0,
     totalEnemies:    enemies.length,
     scoreLog:        [],
     activeProfile:   profile,
@@ -854,7 +860,7 @@ function update(gs: GS, dt: number) {
   gs.bullets = gs.bullets.filter(b => !usedBullets.has(b.id));
 
   // station approach: each kill advances docking progress
-  if (gs.missionKind === 'approach' && killedEnemies.size > 0) {
+  if (gs.missionKind === 'approach' && !gs.dockSeq && killedEnemies.size > 0) {
     gs.stationProgress = Math.min(1, gs.stationProgress + killedEnemies.size * 0.015);
   }
 
@@ -892,13 +898,26 @@ function update(gs: GS, dt: number) {
   });
 
   /* ── station approach: passive progress fill ── */
-  if (gs.missionKind === 'approach') {
+  if (gs.missionKind === 'approach' && !gs.dockSeq) {
     gs.stationProgress = Math.min(1, gs.stationProgress + 0.008 * dt);
+  }
+
+  /* ── docking sequence ── */
+  if (gs.missionKind === 'approach' && !gs.dockSeq && gs.stationProgress >= 1) {
+    gs.dockSeq = true;
+    gs.bullets  = gs.bullets.filter(b => b.player);
+    gs.enemies  = [];
+  }
+  if (gs.dockSeq) {
+    const aligned = Math.abs(gs.px - W / 2) <= DOCK_TOL;
+    gs.dockLock = aligned
+      ? Math.min(DOCK_HOLD_TIME, gs.dockLock + dt)
+      : Math.max(0, gs.dockLock - dt * 1.5);
   }
 
   /* ── wave clear ── */
   const waveClear = gs.missionKind === 'approach'
-    ? gs.stationProgress >= 1
+    ? gs.dockSeq && gs.dockLock >= DOCK_HOLD_TIME
     : gs.enemies.length === 0;
 
   if (waveClear && gs.waveT <= 0) {
@@ -1090,18 +1109,27 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     drawSpr(ctx, eSpr(e.kind), flash ? C.white : col, e.x, e.y + bob);
   });
 
-  // station icon (wave 1 approach, top center, fades in when progress > 0.6)
-  if (gs.missionKind === 'approach' && gs.stationProgress > 0.6) {
-    const stAlpha = Math.min(1, (gs.stationProgress - 0.6) / 0.25);
-    ctx.globalAlpha = stAlpha * (0.55 + 0.3 * Math.sin(t * 2.2));
-    drawSpr(ctx, SPR.station, C.green, W / 2, 22, 2);
-    ctx.globalAlpha = stAlpha;
-    ctx.font      = "11px 'VT323', monospace";
-    ctx.textAlign = 'center';
-    ctx.fillStyle = C.green;
-    ctx.fillText('NEO-7', W / 2, 40);
-    ctx.textAlign = 'left';
-    ctx.globalAlpha = 1;
+  // station icon — fades in during approach, grows during docking sequence
+  if (gs.missionKind === 'approach') {
+    if (gs.dockSeq) {
+      const prog  = gs.dockLock / DOCK_HOLD_TIME;
+      const scale = 2 + prog * 2.5;
+      const yPos  = 22 + prog * 55;
+      ctx.globalAlpha = 0.8 + 0.2 * Math.sin(t * 8);
+      drawSpr(ctx, SPR.station, C.green, W / 2, yPos, scale);
+      ctx.globalAlpha = 1;
+    } else if (gs.stationProgress > 0.6) {
+      const stAlpha = Math.min(1, (gs.stationProgress - 0.6) / 0.25);
+      ctx.globalAlpha = stAlpha * (0.55 + 0.3 * Math.sin(t * 2.2));
+      drawSpr(ctx, SPR.station, C.green, W / 2, 22, 2);
+      ctx.globalAlpha = stAlpha;
+      ctx.font      = "11px 'VT323', monospace";
+      ctx.textAlign = 'center';
+      ctx.fillStyle = C.green;
+      ctx.fillText('NEO-7', W / 2, 40);
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
+    }
   }
 
   // bullets
@@ -1128,6 +1156,65 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     ctx.fillRect(Math.floor(s.x), Math.floor(s.y), PX, PX);
   });
   ctx.globalAlpha = 1;
+
+  // docking alignment overlay
+  if (gs.missionKind === 'approach' && gs.dockSeq) {
+    const cx      = W / 2;
+    const aligned = Math.abs(gs.px - cx) <= DOCK_TOL;
+    const lockPct = gs.dockLock / DOCK_HOLD_TIME;
+
+    // dim everything outside the corridor
+    ctx.fillStyle = 'rgba(7,6,14,0.55)';
+    ctx.fillRect(0, 0, cx - DOCK_TOL, H);
+    ctx.fillRect(cx + DOCK_TOL, 0, W - (cx + DOCK_TOL), H);
+
+    // corridor walls
+    ctx.strokeStyle = aligned ? 'rgba(102,242,165,0.85)' : 'rgba(247,199,106,0.75)';
+    ctx.lineWidth   = 1.5;
+    ctx.setLineDash([8, 5]);
+    ctx.beginPath();
+    ctx.moveTo(cx - DOCK_TOL, 0); ctx.lineTo(cx - DOCK_TOL, H);
+    ctx.moveTo(cx + DOCK_TOL, 0); ctx.lineTo(cx + DOCK_TOL, H);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // center hairline
+    ctx.strokeStyle = 'rgba(102,242,165,0.15)';
+    ctx.lineWidth   = 1;
+    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
+
+    // status text
+    ctx.font      = "20px 'VT323', monospace";
+    ctx.textAlign = 'center';
+    ctx.fillStyle = aligned ? C.green : C.amber;
+    ctx.fillText(aligned ? 'HOLDING ALIGNMENT' : 'ALIGN FOR DOCK', cx, PY - 44);
+
+    // direction nudge
+    if (!aligned) {
+      ctx.font        = "15px 'VT323', monospace";
+      ctx.fillStyle   = C.amber;
+      ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 5);
+      ctx.fillText(gs.px < cx ? '→  MOVE RIGHT' : 'MOVE LEFT  ←', cx, PY - 26);
+      ctx.globalAlpha = 1;
+    }
+
+    // dock-lock meter
+    const mW = 130, mH = 8;
+    const mx = cx - mW / 2, my = PY + 32;
+    ctx.fillStyle   = 'rgba(102,242,165,0.07)';
+    ctx.fillRect(mx, my, mW, mH);
+    ctx.strokeStyle = 'rgba(102,242,165,0.25)';
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(mx, my, mW, mH);
+    if (lockPct > 0) {
+      ctx.fillStyle = aligned ? C.green : 'rgba(102,242,165,0.35)';
+      ctx.fillRect(mx, my, Math.round(mW * lockPct), mH);
+    }
+    ctx.font      = "13px 'VT323', monospace";
+    ctx.fillStyle = aligned ? C.green : C.muted;
+    ctx.fillText('DOCK LOCK', cx, my - 4);
+    ctx.textAlign = 'left';
+  }
 
   drawHUD(ctx, gs);
 }
