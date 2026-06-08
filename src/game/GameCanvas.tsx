@@ -251,7 +251,14 @@ interface GS {
   missionKind:     'approach' | 'eliminate';
   stationProgress: number;
   totalEnemies:    number;
+  scoreLog:        ScoreEvent[];
   activeProfile:   PhysicsProfile;
+}
+
+interface ScoreEvent {
+  label: string;
+  pts:   number;
+  age:   number;
 }
 
 /* ── pixel-art sprites ───────────────────────────────────────────────── */
@@ -415,8 +422,14 @@ function newGame(
     missionKind:     wave === 1 ? 'approach' : 'eliminate',
     stationProgress: 0,
     totalEnemies:    enemies.length,
+    scoreLog:        [],
     activeProfile:   profile,
   };
+}
+
+function logScore(gs: GS, label: string, pts: number) {
+  gs.scoreLog.unshift({ label, pts, age: 0 });
+  if (gs.scoreLog.length > 8) gs.scoreLog.length = 8;
 }
 
 function introGame(): GS {
@@ -464,8 +477,10 @@ function tickUFO(gs: GS, dt: number) {
   for (const b of gs.bullets) {
     if (!b.player) continue;
     if (hit(b.x, b.y, PX, PX * 3, u.x, u.y, uW, uH)) {
-      gs.score += Math.round(u.pts * gs.activeProfile.bonusMult);
+      const uPts = Math.round(u.pts * gs.activeProfile.bonusMult);
+      gs.score += uPts;
       gs.hi    = Math.max(gs.hi, gs.score);
+      logScore(gs, 'UFO', uPts);
       burst(gs, u.x, u.y, C.pink, 14);
       gs.ufo = null;
       gs.ufoT = (18 + Math.random() * 7) * gs.activeProfile.ufoFreq;
@@ -712,6 +727,8 @@ function update(gs: GS, dt: number) {
     return;
   }
 
+  gs.scoreLog.forEach(e => { e.age += dt; });
+
   /* ── individual enemy movement ── */
   gs.enemies.forEach(e => {
     e.t += dt;
@@ -777,8 +794,10 @@ function update(gs: GS, dt: number) {
       const sp = eSpr(e.kind);
       if (hit(b.x, b.y, PX, PX * 3, e.x, e.y, sprW(sp), sprH(sp))) {
         burst(gs, e.x, e.y, eColor(e.kind, e.row));
-        gs.score += Math.round((e.y > H * 0.55 ? e.dpts : e.pts) * gs.activeProfile.bonusMult);
+        const awarded = Math.round((e.y > H * 0.55 ? e.dpts : e.pts) * gs.activeProfile.bonusMult);
+        gs.score += awarded;
         gs.hi = Math.max(gs.hi, gs.score);
+        logScore(gs, e.kind === 2 ? 'BOSS' : e.kind === 1 ? 'FIGHTER' : 'DRONE', awarded);
         killedEnemies.add(e.id);
         usedBullets.add(b.id);
       }
@@ -836,8 +855,10 @@ function update(gs: GS, dt: number) {
     : gs.enemies.length === 0;
 
   if (waveClear && gs.waveT <= 0) {
-    gs.score += Math.round(gs.wave * 500 * gs.activeProfile.bonusMult);
+    const wBonus = Math.round(gs.wave * 500 * gs.activeProfile.bonusMult);
+    gs.score += wBonus;
     gs.hi     = Math.max(gs.hi, gs.score);
+    logScore(gs, 'WAVE BONUS', wBonus);
     gs.waveT  = 2.5;
   }
 
@@ -1127,6 +1148,14 @@ export default function GameCanvas() {
   const lbSubmitRef      = useRef<HTMLButtonElement>(null);
   const lbRetryRef       = useRef<HTMLButtonElement>(null);
   const lbCapturedRef    = useRef({ score: 0, wave: 1 });
+  // desktop panel refs
+  const deskScoreRef     = useRef<HTMLSpanElement>(null);
+  const deskHiRef        = useRef<HTMLSpanElement>(null);
+  const deskWaveRef      = useRef<HTMLSpanElement>(null);
+  const deskMissionRef   = useRef<HTMLSpanElement>(null);
+  const deskPctRef       = useRef<HTMLSpanElement>(null);
+  const deskFillRef      = useRef<HTMLDivElement>(null);
+  const deskLogRef       = useRef<HTMLUListElement>(null);
   const navigate       = useNavigate();
   const gsRef          = useRef<GS>(introGame());
 
@@ -1238,6 +1267,29 @@ export default function GameCanvas() {
         }
       }
 
+      // desktop panels (DOM, no React re-render)
+      const playing = g.phase === 'play' || g.phase === 'die' || g.phase === 'brief' || g.phase === 'over';
+      if (deskScoreRef.current) deskScoreRef.current.textContent = g.score.toLocaleString();
+      if (deskHiRef.current)    deskHiRef.current.textContent    = g.hi.toLocaleString();
+      if (deskWaveRef.current)  deskWaveRef.current.textContent  = String(g.wave);
+      if (playing && deskMissionRef.current && deskPctRef.current && deskFillRef.current) {
+        const pct = g.missionKind === 'approach'
+          ? Math.round(g.stationProgress * 100)
+          : g.totalEnemies > 0 ? Math.round((1 - g.enemies.length / g.totalEnemies) * 100) : 0;
+        deskMissionRef.current.textContent = g.missionKind === 'approach' ? 'DOCK' : 'ELIMINATE';
+        deskPctRef.current.textContent     = `${pct}%`;
+        deskFillRef.current.style.width    = `${pct}%`;
+      }
+      if (deskLogRef.current) {
+        deskLogRef.current.innerHTML = g.scoreLog.map(e => {
+          const alpha = Math.max(0.2, 1 - e.age / 14).toFixed(2);
+          return `<li class="desk-log-item" style="opacity:${alpha}">
+            <span class="desk-log-label">${e.label}</span>
+            <span class="desk-log-pts">+${e.pts.toLocaleString()}</span>
+          </li>`;
+        }).join('');
+      }
+
       // HUD controls — touch only, visible during play only
       if (isTouch && hudControlsRef.current) {
         hudControlsRef.current.style.display = g.phase === 'play' ? 'flex' : 'none';
@@ -1286,6 +1338,26 @@ export default function GameCanvas() {
   return (
     <div className="game-wrap">
       <div className="game-row">
+        {/* ── desktop left panel ── */}
+        <aside className="desk-panel desk-panel-left" aria-label="Pilot status">
+          <p className="desk-panel-title">PILOT STATUS</p>
+          <div className="desk-stat">
+            <span className="desk-stat-label">SCORE</span>
+            <span ref={deskScoreRef} className="desk-stat-value desk-stat-score">0</span>
+          </div>
+          <div className="desk-stat">
+            <span className="desk-stat-label">HI-SCORE</span>
+            <span ref={deskHiRef} className="desk-stat-value">0</span>
+          </div>
+          <div className="desk-stat">
+            <span className="desk-stat-label">WAVE</span>
+            <span ref={deskWaveRef} className="desk-stat-value">1</span>
+          </div>
+          <div className="desk-divider" />
+          <p className="desk-panel-title">SCORE LOG</p>
+          <ul ref={deskLogRef} className="desk-log-list" />
+        </aside>
+
         <div className="canvas-wrap">
           <canvas
             ref={canvasRef}
@@ -1365,6 +1437,25 @@ export default function GameCanvas() {
           </div>
           <div className="sidebar-sub">DOCK</div>
         </div>
+
+        {/* ── desktop right panel ── */}
+        <aside className="desk-panel desk-panel-right" aria-label="Mission and controls">
+          <div className="desk-mission-block">
+            <p className="desk-panel-title">MISSION</p>
+            <span ref={deskMissionRef} className="desk-stat-label desk-mission-kind">—</span>
+            <div className="desk-progress-track">
+              <div ref={deskFillRef} className="desk-progress-fill" style={{ width: '0%' }} />
+            </div>
+            <span ref={deskPctRef} className="desk-progress-pct">0%</span>
+          </div>
+          <div className="desk-divider" />
+          <div className="desk-controls-block">
+            <p className="desk-panel-title">CONTROLS</p>
+            <div className="desk-key-row"><kbd className="desk-key">← →</kbd><span className="desk-key-label">MOVE</span></div>
+            <div className="desk-key-row"><kbd className="desk-key">Z</kbd><span className="desk-key-label">SHOOT</span></div>
+            <div className="desk-key-row"><kbd className="desk-key">ESC</kbd><span className="desk-key-label">MENU</span></div>
+          </div>
+        </aside>
       </div>
       <p className="game-hint">← → MOVE &nbsp;&nbsp; Z SHOOT &nbsp;&nbsp; ESC MENU</p>
     </div>
