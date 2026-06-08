@@ -1374,6 +1374,40 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS) {
 
 }
 
+/* ── cheat codes ─────────────────────────────────────────────────────── */
+function processCheat(gs: GS, raw: string): string {
+  const code = raw.trim().toUpperCase();
+  if (gs.phase !== 'play') return 'PLAY FIRST';
+  switch (code) {
+    case '1UP':
+      if (gs.lives >= 9) return 'ALREADY MAXED';
+      gs.lives = Math.min(9, gs.lives + 1);
+      return '+1 LIFE';
+    case 'MAXLIVES':
+      gs.lives = 9;
+      return 'LIVES: 9';
+    case 'SKIPWAVE':
+    case 'NEXTWAVE':
+    case 'ENDWAVE':
+      gs.enemies = [];
+      if (gs.missionKind === 'approach') {
+        gs.dockSeq   = true;
+        gs.dockLock  = DOCK_HOLD_TIME;
+        gs.dockAscent = 1;
+      }
+      return 'WAVE SKIPPED';
+    case 'GODMODE':
+      gs.invT = 30;
+      return 'INVINCIBLE 30s';
+    case 'BIGPOINTS':
+      gs.score += 10000;
+      gs.hi = Math.max(gs.hi, gs.score);
+      return '+10,000 PTS';
+    default:
+      return 'UNKNOWN CODE';
+  }
+}
+
 /* ── component ───────────────────────────────────────────────────────── */
 export default function GameCanvas() {
   const canvasRef        = useRef<HTMLCanvasElement>(null);
@@ -1405,6 +1439,11 @@ export default function GameCanvas() {
   const trackedWaveRef   = useRef(0);
   const trackedAscentRef = useRef(false);
   const pauseBtnRef      = useRef<HTMLButtonElement>(null);
+  const settingsBtnRef   = useRef<HTMLButtonElement>(null);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const cheatSectionRef  = useRef<HTMLDivElement>(null);
+  const cheatInputRef    = useRef<HTMLInputElement>(null);
+  const cheatStatusRef   = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     const canvas  = canvasRef.current!;
@@ -1421,6 +1460,7 @@ export default function GameCanvas() {
 
     const onDown = (e: KeyboardEvent) => {
       if (document.activeElement === lbInputRef.current) return;
+      if (document.activeElement === cheatInputRef.current) return;
       e.preventDefault();
       gsRef.current.keys.add(e.key);
       if (e.key === 'Escape') navigate('/');
@@ -1523,6 +1563,32 @@ export default function GameCanvas() {
     };
     canvas.addEventListener('click', handleBriefClick);
 
+    // ── settings panel ───────────────────────────────────────────────────
+    const settingsEl    = settingsBtnRef.current!;
+    const settingPanel  = settingsPanelRef.current!;
+    const cheatSection  = cheatSectionRef.current!;
+    const cheatInput    = cheatInputRef.current!;
+    const cheatStatus   = cheatStatusRef.current!;
+
+    const toggleSettings = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const open = settingPanel.style.display !== 'none';
+      settingPanel.style.display = open ? 'none' : 'flex';
+      if (open) cheatSection.style.display = 'none';
+    };
+    settingsEl.addEventListener('pointerdown', toggleSettings);
+
+    const handleCheatKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') submitCheat();
+    };
+    const submitCheat = () => {
+      const result = processCheat(gsRef.current, cheatInput.value);
+      cheatStatus.textContent = result;
+      cheatInput.value = '';
+    };
+    cheatInput.addEventListener('keydown', handleCheatKey);
+
     const pauseEl = pauseBtnRef.current!;
     const handlePauseDown = (e: Event) => {
       e.preventDefault();
@@ -1606,6 +1672,14 @@ export default function GameCanvas() {
         pauseBtnRef.current.textContent   = g.paused ? '▶' : '⏸';
       }
 
+      // settings button — visible during play; close panel when leaving play
+      if (settingsBtnRef.current) {
+        settingsBtnRef.current.style.display = g.phase === 'play' ? 'flex' : 'none';
+      }
+      if (settingsPanelRef.current && g.phase !== 'play') {
+        settingsPanelRef.current.style.display = 'none';
+      }
+
       // briefing choice overlay — touch only, shown only when at bottom of scrollable content
       if (choiceOverlayRef.current) {
         const { maxScroll } = briefScrollBounds(g);
@@ -1652,6 +1726,8 @@ export default function GameCanvas() {
       randomEl.removeEventListener('click', handleRandomize);
       canvas.removeEventListener('click', handleBriefClick);
       pauseEl.removeEventListener('pointerdown', handlePauseDown);
+      settingsEl.removeEventListener('pointerdown', toggleSettings);
+      cheatInput.removeEventListener('keydown', handleCheatKey);
     };
   }, [navigate]);
 
@@ -1753,6 +1829,51 @@ export default function GameCanvas() {
             style={{ display: 'none' }}
             aria-label="Pause"
           >⏸</button>
+
+          <button
+            ref={settingsBtnRef}
+            className="settings-btn"
+            style={{ display: 'none' }}
+            aria-label="Settings"
+          >⚙</button>
+
+          <div ref={settingsPanelRef} className="settings-panel" style={{ display: 'none' }}>
+            <p className="settings-title">— SETTINGS —</p>
+            <button
+              className="settings-item"
+              onClick={() => {
+                if (!cheatSectionRef.current) return;
+                const open = cheatSectionRef.current.style.display !== 'none';
+                cheatSectionRef.current.style.display = open ? 'none' : 'flex';
+                if (!open && cheatInputRef.current) cheatInputRef.current.focus();
+              }}
+            >CHEAT CODES</button>
+            <div ref={cheatSectionRef} className="cheat-section" style={{ display: 'none' }}>
+              <div className="cheat-row">
+                <input
+                  ref={cheatInputRef}
+                  className="cheat-input"
+                  placeholder="ENTER CODE"
+                  maxLength={20}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button
+                  className="cheat-go-btn"
+                  onClick={() => {
+                    const result = processCheat(gsRef.current, cheatInputRef.current?.value ?? '');
+                    if (cheatStatusRef.current) cheatStatusRef.current.textContent = result;
+                    if (cheatInputRef.current) cheatInputRef.current.value = '';
+                  }}
+                >GO</button>
+              </div>
+              <p ref={cheatStatusRef} className="cheat-status"></p>
+            </div>
+            <button
+              className="settings-item settings-close"
+              onClick={() => { if (settingsPanelRef.current) settingsPanelRef.current.style.display = 'none'; }}
+            >CLOSE</button>
+          </div>
 
           <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
             <div className="touch-row">

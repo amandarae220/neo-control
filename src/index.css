@@ -1390,6 +1390,148 @@ button:disabled {
   border-color: var(--green);
 }
 
+/* ── settings button + panel ── */
+.settings-btn {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  width: 36px;
+  height: 36px;
+  background: rgba(7, 6, 14, 0.72);
+  border: 1px solid rgba(102, 242, 165, 0.35);
+  border-radius: 3px;
+  color: var(--green);
+  font-size: 1rem;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 15;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.settings-btn:active {
+  background: rgba(102, 242, 165, 0.12);
+  border-color: var(--green);
+}
+
+.settings-panel {
+  position: absolute;
+  bottom: 52px;
+  left: 10px;
+  z-index: 16;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(7, 6, 14, 0.97);
+  border: 1px solid rgba(102, 242, 165, 0.4);
+  border-radius: 3px;
+  padding: 10px;
+  min-width: 190px;
+  font-family: var(--mono);
+}
+
+.settings-title {
+  color: var(--amber);
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  text-align: center;
+  margin: 0 0 8px;
+}
+
+.settings-item {
+  background: none;
+  border: none;
+  border-radius: 2px;
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.settings-item:hover {
+  background: rgba(102, 242, 165, 0.08);
+}
+
+.settings-close {
+  color: var(--muted);
+  margin-top: 4px;
+  border-top: 1px solid rgba(102, 242, 165, 0.15);
+  padding-top: 8px;
+}
+
+.settings-close:hover {
+  color: var(--green);
+  background: none;
+}
+
+.cheat-section {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0 2px;
+}
+
+.cheat-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.cheat-input {
+  flex: 1;
+  background: rgba(102, 242, 165, 0.06);
+  border: 1px solid rgba(102, 242, 165, 0.3);
+  border-radius: 2px;
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  padding: 4px 6px;
+  outline: none;
+  text-transform: uppercase;
+}
+
+.cheat-input::placeholder {
+  color: var(--muted);
+  text-transform: none;
+}
+
+.cheat-input:focus {
+  border-color: rgba(102, 242, 165, 0.6);
+}
+
+.cheat-go-btn {
+  background: rgba(102, 242, 165, 0.1);
+  border: 1px solid rgba(102, 242, 165, 0.35);
+  border-radius: 2px;
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.cheat-go-btn:hover {
+  background: rgba(102, 242, 165, 0.18);
+}
+
+.cheat-status {
+  color: var(--amber);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  margin: 0;
+  min-height: 1em;
+}
+
 /* ── briefing choice overlay (centered over canvas) ── */
 
 .touch-row {
