@@ -306,6 +306,9 @@ interface GS {
   gravitySurgeTimer:   number;
   gravitySurgeActive:  boolean;
   gravitySurgeWarn:    boolean;
+  gtaDroneLeft:        boolean;
+  gtaDroneHP:          number;
+  gtaDroneShootT:      number;
   missionKind:     'approach' | 'eliminate';
   stationProgress: number;
   dockSeq:         boolean;
@@ -338,8 +341,15 @@ const SPR = {
   ],
 };
 
-const UFO_SPR  = [' ##### ', '#######', '#.#.#.#', '#######', ' ##### '];
-const GRAV_SPR = ['  ###  ', ' ##### ', '#######', '#######', ' ##### ', '  ###  '];
+const UFO_SPR      = [' ##### ', '#######', '#.#.#.#', '#######', ' ##### '];
+const GRAV_SPR     = ['  ###  ', ' ##### ', '#######', '#######', ' ##### ', '  ###  '];
+const GTA_DRONE_SPR = [
+  ' ##.## ',
+  '#######',
+  '##.#.##',
+  '#######',
+  ' ##.## ',
+];
 
 function drawSpr(
   ctx: CanvasRenderingContext2D,
@@ -480,7 +490,7 @@ function newGame(
     planets: [], spawnPlanetT: 6,
     txLines: [], txLine: 0, txCh: 0, txDone: false, txWait: 0,
     txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0, txScroll: 0, paused: false,
-    introT: 0, jumpT: 0, gravitySurgeTimer: 0, gravitySurgeActive: false, gravitySurgeWarn: false,
+    introT: 0, jumpT: 0, gravitySurgeTimer: 0, gravitySurgeActive: false, gravitySurgeWarn: false, gtaDroneLeft: false, gtaDroneHP: 3, gtaDroneShootT: 0,
     missionKind:     wave === 1 ? 'approach' : 'eliminate',
     stationProgress: 0,
     dockSeq:         false,
@@ -980,15 +990,63 @@ function update(gs: GS, dt: number) {
 
   if (!gs.dockSeq) {
     if (gs.activeProfile.gravMass > 1.5) {
-      const SURGE_CYCLE = 22, WARN_DUR = 3, SURGE_DUR = 4;
       gs.gravitySurgeTimer += dt;
-      const st = gs.gravitySurgeTimer;
-      gs.gravitySurgeWarn   = st >= SURGE_CYCLE && st < SURGE_CYCLE + WARN_DUR;
-      gs.gravitySurgeActive = st >= SURGE_CYCLE + WARN_DUR && st < SURGE_CYCLE + WARN_DUR + SURGE_DUR;
-      if (st >= SURGE_CYCLE + WARN_DUR + SURGE_DUR) {
+      const st      = gs.gravitySurgeTimer;
+      const wasWarn = gs.gravitySurgeWarn;
+      gs.gravitySurgeWarn   = st >= SC && st < SC + SW;
+      gs.gravitySurgeActive = st >= SC + SW && st < SC + SW + SA;
+      if (gs.gravitySurgeWarn && !wasWarn) {
+        gs.gtaDroneLeft  = Math.random() > 0.5;
+        gs.gtaDroneHP    = 3;
+        gs.gtaDroneShootT = 1.2;
+      }
+      if (st >= SC + SW + SA) {
         gs.gravitySurgeTimer  = 0;
         gs.gravitySurgeActive = false;
         gs.gravitySurgeWarn   = false;
+      }
+
+      // drone mechanics during active phase
+      if (gs.gravitySurgeActive && gs.gtaDroneHP > 0) {
+        const dx = droneCurrentX(gs);
+
+        // lateral gravity pull toward drone
+        gs.px += (dx - gs.px) * 0.28 * dt;
+        gs.px  = Math.max(14, Math.min(W - 14, gs.px));
+
+        // drone fires at player
+        gs.gtaDroneShootT -= dt;
+        if (gs.gtaDroneShootT <= 0 && gs.invT <= 0) {
+          const bx = dx, by = DRONE_Y + 10;
+          const ddx = gs.px - bx, ddy = PY - by;
+          const dd  = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+          gs.bullets.push({ id: gs.seq++, x: bx, y: by, vx: (ddx / dd) * 140, vy: (ddy / dd) * 140, player: false });
+          gs.gtaDroneShootT = 1.4 + Math.random() * 0.5;
+        }
+
+        // player bullets hit drone
+        const droneW = sprW(GTA_DRONE_SPR, PX + 1), droneH = sprH(GTA_DRONE_SPR, PX + 1);
+        const used   = new Set<number>();
+        for (const b of gs.bullets) {
+          if (!b.player || used.has(b.id)) continue;
+          if (hit(b.x, b.y, PX, PX * 3, dx, DRONE_Y, droneW, droneH)) {
+            used.add(b.id);
+            gs.gtaDroneHP--;
+            burst(gs, dx, DRONE_Y, C.amber, 6);
+            if (gs.gtaDroneHP <= 0) {
+              burst(gs, dx, DRONE_Y, C.amber, 14);
+              burst(gs, dx, DRONE_Y, C.red, 8);
+              const pts = Math.round(800 * gs.activeProfile.bonusMult);
+              gs.score += pts; gs.hi = Math.max(gs.hi, gs.score);
+              logScore(gs, 'GTA DRONE', pts);
+              gs.gravitySurgeActive = false;
+              gs.gravitySurgeWarn   = false;
+              gs.gravitySurgeTimer  = 0;
+            }
+            break;
+          }
+        }
+        gs.bullets = gs.bullets.filter(b => !used.has(b.id));
       }
     }
     tickUFO(gs, dt);
@@ -1220,6 +1278,80 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
   ctx.textAlign = 'left';
 }
 
+/* ── GTA drone constants & position helper ───────────────────────────── */
+const SC = 22, SW = 3, SA = 4; // surge cycle, warn dur, active dur (seconds)
+const DRONE_Y     = Math.round(H * 0.27);
+const DRONE_HOVER = 58;
+
+function droneCurrentX(gs: GS): number {
+  const hoverX = gs.gtaDroneLeft ? DRONE_HOVER : W - DRONE_HOVER;
+  const offX   = gs.gtaDroneLeft ? -44 : W + 44;
+  const st     = gs.gravitySurgeTimer;
+  if (gs.gravitySurgeWarn) {
+    const p = Math.min(1, (st - SC) / SW);
+    return offX + (hoverX - offX) * (1 - Math.pow(1 - p, 3));
+  }
+  if (gs.gravitySurgeActive) {
+    const p = Math.min(1, (st - SC - SW) / SA);
+    if (p < 0.825) return hoverX;
+    return hoverX + (offX - hoverX) * Math.pow((p - 0.825) / 0.175, 2);
+  }
+  return offX;
+}
+
+/* ── GTA drone draw ──────────────────────────────────────────────────── */
+function drawGTADrone(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
+  if (!gs.gravitySurgeWarn && !gs.gravitySurgeActive) return;
+  if (gs.gravitySurgeActive && gs.gtaDroneHP <= 0) return;
+
+  const droneX = droneCurrentX(gs);
+
+  // expanding gravity rings (active phase only)
+  if (gs.gravitySurgeActive) {
+    const maxR = 100;
+    for (let i = 0; i < 3; i++) {
+      const phase  = ((t * 0.45) + i * 0.333) % 1.0;
+      const radius = phase * maxR;
+      const alpha  = (1 - phase) * 0.45;
+      ctx.strokeStyle = `rgba(247,199,106,${alpha.toFixed(3)})`;
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.arc(droneX, DRONE_Y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  // damage state — color shifts red as HP drops
+  const hp      = gs.gtaDroneHP;
+  const damaged = gs.gravitySurgeActive && hp < 3;
+  const color   = hp === 1 ? C.red : hp === 2 ? '#f7a832' : C.amber;
+  const flicker = damaged && Math.sin(t * (hp === 1 ? 18 : 10)) > 0;
+  ctx.globalAlpha = gs.gravitySurgeActive ? (flicker ? 0.45 : 0.92) : 0.65;
+  drawSpr(ctx, GTA_DRONE_SPR, flicker ? C.red : color, droneX, DRONE_Y, PX + 1);
+  ctx.globalAlpha = 1;
+
+  // HP pips (active phase)
+  if (gs.gravitySurgeActive) {
+    const pipW = 6, pipGap = 4;
+    const totalW = 3 * pipW + 2 * pipGap;
+    const pipX   = droneX - totalW / 2;
+    const pipY   = DRONE_Y - sprH(GTA_DRONE_SPR, PX + 1) / 2 - 8;
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = i < hp ? color : 'rgba(122,112,136,0.35)';
+      ctx.fillRect(Math.floor(pipX + i * (pipW + pipGap)), Math.floor(pipY), pipW, 3);
+    }
+  }
+
+  // label
+  ctx.textAlign   = 'center';
+  ctx.font        = "13px 'VT323', monospace";
+  ctx.fillStyle   = color;
+  ctx.globalAlpha = gs.gravitySurgeActive ? 0.88 : 0.55;
+  ctx.fillText('GTA-7', droneX, DRONE_Y + sprH(GTA_DRONE_SPR, PX + 1) / 2 + 11);
+  ctx.globalAlpha = 1;
+  ctx.textAlign   = 'left';
+}
+
 /* ── render ──────────────────────────────────────────────────────────── */
 function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
   ctx.fillStyle = C.bg;
@@ -1287,6 +1419,8 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   gs.planets.forEach(planet => drawPlanet(ctx, planet));
 
   if (gs.phase === 'brief') { drawBrief(ctx, gs, t, isTouch); return; }
+
+  drawGTADrone(ctx, gs, t);
 
   // gravity rocks
   gs.gravRocks.forEach(rock => {
@@ -1438,7 +1572,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     ctx.font      = "20px 'VT323', monospace";
     ctx.fillStyle = C.amber;
     ctx.globalAlpha = pulse;
-    ctx.fillText(gs.gravitySurgeActive ? '⚠ GRAVITY SURGE' : '⚠ SURGE IMMINENT', W / 2, 54);
+    ctx.fillText(gs.gravitySurgeActive ? '⚠ GRAVITY ANCHOR ACTIVE' : '⚠ GTA DRONE DETECTED', W / 2, 54);
     if (gs.gravitySurgeActive) {
       ctx.globalAlpha = 0.04;
       ctx.fillStyle   = '#f7961e';
