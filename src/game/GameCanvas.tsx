@@ -309,6 +309,7 @@ interface GS {
   gtaDroneLeft:        boolean;
   gtaDroneHP:          number;
   gtaDroneShootT:      number;
+  stickX:              number;
   missionKind:     'approach' | 'eliminate';
   stationProgress: number;
   dockSeq:         boolean;
@@ -490,7 +491,7 @@ function newGame(
     planets: [], spawnPlanetT: 6,
     txLines: [], txLine: 0, txCh: 0, txDone: false, txWait: 0,
     txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0, txScroll: 0, paused: false,
-    introT: 0, jumpT: 0, gravitySurgeTimer: 0, gravitySurgeActive: false, gravitySurgeWarn: false, gtaDroneLeft: false, gtaDroneHP: 3, gtaDroneShootT: 0,
+    introT: 0, jumpT: 0, gravitySurgeTimer: 0, gravitySurgeActive: false, gravitySurgeWarn: false, gtaDroneLeft: false, gtaDroneHP: 3, gtaDroneShootT: 0, stickX: 0,
     missionKind:     wave === 1 ? 'approach' : 'eliminate',
     stationProgress: 0,
     dockSeq:         false,
@@ -875,6 +876,8 @@ function update(gs: GS, dt: number) {
   if (gs.dockAscent <= 0) {
     if (gs.keys.has('ArrowLeft')  || gs.keys.has('a')) gs.px = Math.max(14, gs.px - P_SPD * dt);
     if (gs.keys.has('ArrowRight') || gs.keys.has('d')) gs.px = Math.min(W - 14, gs.px + P_SPD * dt);
+    if (Math.abs(gs.stickX) > 0.08)
+      gs.px = Math.max(14, Math.min(W - 14, gs.px + gs.stickX * P_SPD * dt));
   }
 
   /* ── player shoot ── */
@@ -1564,7 +1567,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     ctx.textAlign = 'left';
   }
 
-  drawHUD(ctx, gs);
+  drawHUD(ctx, gs, isTouch);
 
   if (gs.gravitySurgeActive || gs.gravitySurgeWarn) {
     const pulse   = 0.65 + 0.35 * Math.sin(t * (gs.gravitySurgeActive ? 10 : 4));
@@ -1596,19 +1599,20 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   }
 }
 
-function drawHUD(ctx: CanvasRenderingContext2D, gs: GS) {
+function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
+  const edge = isTouch ? 80 : 8;
   ctx.font      = "16px 'VT323', monospace";
   ctx.textAlign = 'left';
 
-  ctx.fillStyle = C.muted; ctx.fillText('SCORE', 8, 18);
-  ctx.fillStyle = C.cyan;  ctx.fillText(String(gs.score), 8, 34);
+  ctx.fillStyle = C.muted; ctx.fillText('SCORE', edge, 18);
+  ctx.fillStyle = C.cyan;  ctx.fillText(String(gs.score), edge, 34);
 
   ctx.textAlign = 'center';
   ctx.fillStyle = C.muted; ctx.fillText('HI-SCORE', W / 2, 18);
   ctx.fillStyle = C.amber; ctx.fillText(String(gs.hi), W / 2, 34);
 
   ctx.textAlign = 'right';
-  ctx.fillStyle = C.muted; ctx.fillText(`WAVE ${gs.wave}`, W - 8, 18);
+  ctx.fillStyle = C.muted; ctx.fillText(`WAVE ${gs.wave}`, W - edge, 18);
 
   // mission progress in HUD
   if (gs.phase === 'play' || gs.phase === 'die') {
@@ -1618,7 +1622,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS) {
       : gs.totalEnemies > 0 ? Math.round((1 - gs.enemies.length / gs.totalEnemies) * 100) : 0;
     const label = gs.missionKind === 'approach' ? 'DOCK' : 'ELIM';
     ctx.fillStyle = C.green;
-    ctx.fillText(`${label}: ${pct}%`, W - 8, 34);
+    ctx.fillText(`${label}: ${pct}%`, W - edge, 34);
   }
 
   ctx.font      = "16px 'VT323', monospace";
@@ -1709,6 +1713,8 @@ export default function GameCanvas() {
   const trackedAscentRef = useRef(false);
   const pauseBtnRef      = useRef<HTMLButtonElement>(null);
   const settingsBtnRef   = useRef<HTMLButtonElement>(null);
+  const joystickBaseRef  = useRef<HTMLDivElement>(null);
+  const joystickKnobRef  = useRef<HTMLDivElement>(null);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const cheatSectionRef  = useRef<HTMLDivElement>(null);
   const cheatInputRef    = useRef<HTMLInputElement>(null);
@@ -1876,6 +1882,47 @@ export default function GameCanvas() {
     };
     pauseEl.addEventListener('pointerdown', handlePauseDown);
 
+    // ── analog joystick ─────────────────────────────────────────────────
+    const joyBase = joystickBaseRef.current!;
+    const joyKnob = joystickKnobRef.current!;
+    const MAX_TRAVEL = 28; // px knob can move from center
+    let   activeTouchId: number | null = null;
+    let   joyCx = 0;
+
+    const onJoyStart = (e: TouchEvent) => {
+      e.preventDefault();
+      if (activeTouchId !== null) return;
+      const t   = e.changedTouches[0];
+      activeTouchId = t.identifier;
+      const r   = joyBase.getBoundingClientRect();
+      joyCx = r.left + r.width / 2;
+    };
+    const onJoyMove = (e: TouchEvent) => {
+      e.preventDefault();
+      let touch: Touch | null = null;
+      for (let i = 0; i < e.touches.length; i++) {
+        if (e.touches[i].identifier === activeTouchId) { touch = e.touches[i]; break; }
+      }
+      if (!touch) return;
+      const raw  = touch.clientX - joyCx;
+      const clamped = Math.max(-MAX_TRAVEL, Math.min(MAX_TRAVEL, raw));
+      joyKnob.style.transform = `translate(calc(-50% + ${clamped}px), -50%)`;
+      gsRef.current.stickX = clamped / MAX_TRAVEL;
+    };
+    const onJoyEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      for (let i = 0; i < e.touches.length; i++) {
+        if (e.touches[i].identifier === activeTouchId) return; // still active
+      }
+      activeTouchId = null;
+      joyKnob.style.transform = 'translate(-50%, -50%)';
+      gsRef.current.stickX = 0;
+    };
+    joyBase.addEventListener('touchstart',  onJoyStart, { passive: false });
+    joyBase.addEventListener('touchmove',   onJoyMove,  { passive: false });
+    joyBase.addEventListener('touchend',    onJoyEnd,   { passive: false });
+    joyBase.addEventListener('touchcancel', onJoyEnd,   { passive: false });
+
     let last    = performance.now();
     let raf     = 0;
     let mounted = true;
@@ -1940,9 +1987,10 @@ export default function GameCanvas() {
         }).join('');
       }
 
-      // HUD controls — touch only, visible during play only
-      if (isTouch && hudControlsRef.current) {
-        hudControlsRef.current.style.display = g.phase === 'play' ? 'flex' : 'none';
+      // HUD controls — CSS @media (pointer: coarse) handles touch-only visibility;
+      // inline style just gates on play phase vs. everything else
+      if (hudControlsRef.current) {
+        hudControlsRef.current.style.display = g.phase === 'play' ? '' : 'none';
       }
 
       // pause button — visible during play on all devices
@@ -2007,6 +2055,10 @@ export default function GameCanvas() {
       pauseEl.removeEventListener('pointerdown', handlePauseDown);
       settingsEl.removeEventListener('pointerdown', toggleSettings);
       cheatInput.removeEventListener('keydown', handleCheatKey);
+      joyBase.removeEventListener('touchstart',  onJoyStart);
+      joyBase.removeEventListener('touchmove',   onJoyMove);
+      joyBase.removeEventListener('touchend',    onJoyEnd);
+      joyBase.removeEventListener('touchcancel', onJoyEnd);
     };
   }, [navigate]);
 
@@ -2070,24 +2122,15 @@ export default function GameCanvas() {
             }}
           />
           <div ref={hudControlsRef} className="hud-controls" style={{ display: 'none' }} aria-hidden="true">
-            <button
-              className="hud-btn-dir"
-              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowLeft'); }}
-              onTouchEnd={() => gsRef.current.keys.delete('ArrowLeft')}
-              onTouchCancel={() => gsRef.current.keys.delete('ArrowLeft')}
-            >◄</button>
+            <div ref={joystickBaseRef} className="joystick-base">
+              <div ref={joystickKnobRef} className="joystick-knob" />
+            </div>
             <button
               className="hud-btn hud-btn-fire"
               onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
               onTouchEnd={() => gsRef.current.keys.delete('z')}
               onTouchCancel={() => gsRef.current.keys.delete('z')}
             >FIRE</button>
-            <button
-              className="hud-btn-dir"
-              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('ArrowRight'); }}
-              onTouchEnd={() => gsRef.current.keys.delete('ArrowRight')}
-              onTouchCancel={() => gsRef.current.keys.delete('ArrowRight')}
-            >►</button>
           </div>
           <div ref={lbOverlayRef} className="lb-overlay" style={{ display: 'none' }}>
             <p className="lb-header">GAME OVER</p>

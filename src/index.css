@@ -1247,12 +1247,38 @@ button:disabled {
   bottom: 0;
   left: env(safe-area-inset-left, 0px);
   right: env(safe-area-inset-right, 0px);
-  padding: 0 0 calc(env(safe-area-inset-bottom, 0px) + 8px);
-  justify-content: center;
+  padding: 0 24px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  justify-content: space-between;
   align-items: center;
-  gap: 24px;
+  gap: 20px;
   pointer-events: none;
   z-index: 100;
+}
+
+.joystick-base {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: rgba(102, 242, 165, 0.04);
+  border: 2px solid rgba(102, 242, 165, 0.22);
+  position: relative;
+  flex-shrink: 0;
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.joystick-knob {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(102, 242, 165, 0.14);
+  border: 2px solid rgba(102, 242, 165, 0.55);
+  box-shadow: 0 0 14px rgba(102, 242, 165, 0.2);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 .hud-move {
@@ -1366,7 +1392,7 @@ button:disabled {
 /* ── pause button ── */
 .pause-btn {
   position: absolute;
-  bottom: 10px;
+  top: 52px;
   right: 10px;
   width: 36px;
   height: 36px;
@@ -1393,7 +1419,7 @@ button:disabled {
 /* ── settings button + panel ── */
 .settings-btn {
   position: absolute;
-  bottom: 10px;
+  top: 52px;
   left: 10px;
   width: 36px;
   height: 36px;
@@ -1419,7 +1445,7 @@ button:disabled {
 
 .settings-panel {
   position: absolute;
-  bottom: 52px;
+  top: 94px;
   left: 10px;
   z-index: 16;
   display: none;
@@ -1810,6 +1836,15 @@ button:disabled {
 
   .hud-controls {
     display: flex;
+  }
+
+  .pause-btn,
+  .settings-btn {
+    top: 6px;
+  }
+
+  .settings-panel {
+    top: 48px;
   }
 
   .game-hint {
