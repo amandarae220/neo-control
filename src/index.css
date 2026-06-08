@@ -1348,7 +1348,7 @@ button:disabled {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: 24px;
   background: rgba(4, 5, 14, 0.97);
   z-index: 20;
   padding: 24px 20px;
@@ -1361,27 +1361,31 @@ button:disabled {
   letter-spacing: 0.22em;
   text-transform: uppercase;
   text-shadow: 0 0 24px rgba(255, 90, 90, 0.5);
-  margin: 0;
+  margin: 0 0 6px;
 }
 
 .lb-score-block {
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .lb-label {
-  font-size: 0.6rem;
+  font-size: 0.75rem;
   color: var(--muted);
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  margin: 0 0 4px;
+  margin: 0;
 }
 
 .lb-score-value {
-  font-size: 2.6rem;
+  font-size: 2.8rem;
   color: var(--cyan);
   letter-spacing: 0.08em;
   text-shadow: 0 0 20px rgba(0, 229, 255, 0.5);
   margin: 0;
+  line-height: 1;
 }
 
 .lb-name-section {
