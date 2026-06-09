@@ -1,17 +1,17 @@
 import type { RefObject } from 'react';
 
 type Props = {
-  overlayRef:      RefObject<HTMLDivElement>;
-  scoreRef:        RefObject<HTMLOutputElement>;
-  loadingRef:      RefObject<HTMLParagraphElement>;
-  rankAlertRef:    RefObject<HTMLDivElement>;
-  nameSectionRef:  RefObject<HTMLDivElement>;
-  inputRef:        RefObject<HTMLInputElement>;
-  randomRef:       RefObject<HTMLButtonElement>;
-  submitRef:       RefObject<HTMLButtonElement>;
-  boardRef:        RefObject<HTMLDivElement>;
-  listRef:         RefObject<HTMLOListElement>;
-  retryRef:        RefObject<HTMLButtonElement>;
+  overlayRef:      RefObject<HTMLDivElement | null>;
+  scoreRef:        RefObject<HTMLOutputElement | null>;
+  loadingRef:      RefObject<HTMLParagraphElement | null>;
+  rankAlertRef:    RefObject<HTMLDivElement | null>;
+  nameSectionRef:  RefObject<HTMLDivElement | null>;
+  inputRef:        RefObject<HTMLInputElement | null>;
+  randomRef:       RefObject<HTMLButtonElement | null>;
+  submitRef:       RefObject<HTMLButtonElement | null>;
+  boardRef:        RefObject<HTMLDivElement | null>;
+  listRef:         RefObject<HTMLOListElement | null>;
+  retryRef:        RefObject<HTMLButtonElement | null>;
 };
 
 export default function LeaderboardOverlay({

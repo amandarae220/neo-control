@@ -1,10 +1,10 @@
 import type { RefObject } from 'react';
 
 type Props = {
-  panelRef:        RefObject<HTMLDivElement>;
-  cheatSectionRef: RefObject<HTMLDivElement>;
-  cheatInputRef:   RefObject<HTMLInputElement>;
-  cheatStatusRef:  RefObject<HTMLParagraphElement>;
+  panelRef:        RefObject<HTMLDivElement | null>;
+  cheatSectionRef: RefObject<HTMLDivElement | null>;
+  cheatInputRef:   RefObject<HTMLInputElement | null>;
+  cheatStatusRef:  RefObject<HTMLParagraphElement | null>;
   onCheatSubmit:   () => void;
 };
 

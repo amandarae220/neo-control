@@ -2,6 +2,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { scenarios } from "../data/scenarios";
 import OrbitViz from "../components/mission/OrbitViz";
 import { actionProfiles, getMissionOutcome, predictThreat } from "../gameplay/missionLogic";
+import type { DefenseAction } from "../gameplay/missionLogic";
 import { useMissionStatus } from "../hooks/useMissionStatus";
 
 type InfoTipProps = {
