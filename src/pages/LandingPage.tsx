@@ -4,7 +4,7 @@ export default function LandingPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="page-shell landing-shell">
+    <main className="page-shell landing-shell">
       <p className="eyebrow">NEO Control · Incident Report Vol. I</p>
       <h1>Space Cadet</h1>
       <p>You are not qualified for this. The autopilot is broken.<br />You were the only one who picked up the phone.</p>
@@ -12,6 +12,6 @@ export default function LandingPage() {
       <button className="primary-action compact" onClick={() => navigate("/game")}>
         Accept Mission
       </button>
-    </div>
+    </main>
   );
 }

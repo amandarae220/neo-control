@@ -11,25 +11,40 @@ type ResultsState = {
   scenarioTitle: string;
 };
 
+function isResultsState(s: unknown): s is ResultsState {
+  if (!s || typeof s !== 'object') return false;
+  const r = s as Record<string, unknown>;
+  return (
+    typeof r.score             === 'number' &&
+    typeof r.outcome           === 'string' &&
+    typeof r.deflectedCount    === 'number' &&
+    typeof r.totalThreats      === 'number' &&
+    typeof r.moonCollisionCount === 'number' &&
+    typeof r.highestImpactRisk === 'number' &&
+    typeof r.highestMoonRisk   === 'number' &&
+    typeof r.scenarioTitle     === 'string'
+  );
+}
+
 export default function ResultsPage() {
   const { state } = useLocation();
   const navigate = useNavigate();
-  const results = state as ResultsState | null;
+  const results = isResultsState(state) ? state : null;
 
   if (!results) {
     return (
-      <div className="page-shell">
+      <main className="page-shell">
         <h1>Mission Results</h1>
         <p>No mission data available.</p>
         <button className="secondary-action" onClick={() => navigate("/missions")}>
           Select Mission
         </button>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="page-shell">
+    <main className="page-shell">
       <p className="eyebrow">{results.scenarioTitle}</p>
       <h1>Mission Results</h1>
       <p className="result-outcome">{results.outcome}</p>
@@ -62,6 +77,6 @@ export default function ResultsPage() {
       <button className="primary-action" onClick={() => navigate("/missions")}>
         Mission Select
       </button>
-    </div>
+    </main>
   );
 }
