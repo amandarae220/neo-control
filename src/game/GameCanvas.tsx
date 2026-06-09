@@ -1650,6 +1650,10 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
 /* ── cheat codes ─────────────────────────────────────────────────────── */
 function processCheat(gs: GS, raw: string): string {
   const code = raw.trim().toUpperCase();
+  if (code === 'SKIPTOLEADER') {
+    gs.phase = 'over';
+    return 'LEADERBOARD';
+  }
   if (gs.phase !== 'play') return 'PLAY FIRST';
   switch (code) {
     case '1UP':
@@ -1717,6 +1721,7 @@ export default function GameCanvas() {
   const joystickKnobRef  = useRef<HTMLDivElement>(null);
   const lbRankAlertRef   = useRef<HTMLDivElement>(null);
   const lbLoadingRef     = useRef<HTMLParagraphElement>(null);
+  const lbHiRef          = useRef<HTMLSpanElement>(null);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const cheatSectionRef  = useRef<HTMLDivElement>(null);
   const cheatInputRef    = useRef<HTMLInputElement>(null);
@@ -1786,23 +1791,25 @@ export default function GameCanvas() {
 
     // ── leaderboard qualification check ─────────────────────────────────
     const checkLeaderboard = async (score: number) => {
-      const top = await fetchTopScores(10);
+      const top = await fetchTopScores(5);
       if (lbLoadingRef.current) lbLoadingRef.current.style.display = 'none';
-      const qualifies = top.length < 10 || score > top[top.length - 1].score;
+
+      if (lbListRef.current) {
+        lbListRef.current.innerHTML = top.map((s, i) =>
+          `<li class="lb-list-item">
+            <span class="lb-rank">${String(i + 1).padStart(2, '0')}</span>
+            <span class="lb-name">${s.name}</span>
+            <span class="lb-pts">${s.score.toLocaleString()}</span>
+          </li>`
+        ).join('');
+      }
+      if (lbBoardRef.current) lbBoardRef.current.style.display = 'flex';
+
+      const qualifies = top.length < 5 || score > top[top.length - 1].score;
       if (qualifies) {
         if (lbRankAlertRef.current)   lbRankAlertRef.current.style.display   = 'flex';
         if (lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'flex';
-      } else {
-        if (lbListRef.current) {
-          lbListRef.current.innerHTML = top.map((s, i) =>
-            `<li class="lb-list-item">
-              <span class="lb-rank">${String(i + 1).padStart(2, '0')}</span>
-              <span class="lb-name">${s.name}</span>
-              <span class="lb-pts">${s.score.toLocaleString()}</span>
-            </li>`
-          ).join('');
-        }
-        if (lbBoardRef.current) lbBoardRef.current.style.display = 'flex';
+        lbInputRef.current?.focus();
       }
     };
 
@@ -1817,7 +1824,7 @@ export default function GameCanvas() {
       const { score, wave } = lbCapturedRef.current;
 
       await submitScore(name, score, wave);
-      const top = await fetchTopScores(10);
+      const top = await fetchTopScores(5);
 
       if (lbListRef.current) {
         lbListRef.current.innerHTML = top.map((s, i) => {
@@ -2045,10 +2052,10 @@ export default function GameCanvas() {
         if (g.phase === 'over' && lbOverlayRef.current.style.display === 'none') {
           lbCapturedRef.current = { score: g.score, wave: g.wave };
           if (lbScoreRef.current)       lbScoreRef.current.textContent         = g.score.toLocaleString();
+          if (lbHiRef.current)          lbHiRef.current.textContent            = g.hi.toLocaleString();
           if (lbInputRef.current)       lbInputRef.current.value               = randomCallsign();
           if (lbRankAlertRef.current)   lbRankAlertRef.current.style.display   = 'none';
           if (lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'none';
-          if (lbBoardRef.current)       lbBoardRef.current.style.display       = 'none';
           if (lbLoadingRef.current)     lbLoadingRef.current.style.display     = supabase ? 'block' : 'none';
           lbOverlayRef.current.style.display = 'flex';
           if (supabase) checkLeaderboard(g.score);
@@ -2057,7 +2064,6 @@ export default function GameCanvas() {
           lbOverlayRef.current.style.display = 'none';
           if (lbRankAlertRef.current)   lbRankAlertRef.current.style.display   = 'none';
           if (lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'none';
-          if (lbBoardRef.current)       lbBoardRef.current.style.display       = 'none';
           if (lbLoadingRef.current)     lbLoadingRef.current.style.display     = 'none';
           if (lbInputRef.current) lbInputRef.current.value = '';
           if (lbSubmitRef.current) {
@@ -2164,29 +2170,40 @@ export default function GameCanvas() {
             >FIRE</button>
           </div>
           <div ref={lbOverlayRef} className="lb-overlay" style={{ display: 'none' }}>
-            <p className="lb-header">GAME OVER</p>
-            <div className="lb-score-block">
-              <p className="lb-label">YOUR SCORE</p>
-              <p ref={lbScoreRef} className="lb-score-value">0</p>
-            </div>
-            <p ref={lbLoadingRef} className="lb-loading" style={{ display: 'none' }}>CHECKING LEADERBOARD…</p>
-            <div ref={lbRankAlertRef} className="lb-rank-alert" style={{ display: 'none' }}>
-              <span className="lb-rank-alert-icon">▲</span>
-              <span className="lb-rank-alert-text">NEW LEADERBOARD ENTRY</span>
-            </div>
-            <div ref={lbNameSectionRef} className="lb-name-section" style={{ display: 'none' }}>
-              <p className="lb-label">ENTER CALLSIGN</p>
-              <div className="lb-callsign-row">
-                <input ref={lbInputRef} className="lb-input" maxLength={12} placeholder="NOVA WOLF" autoComplete="off" spellCheck={false} />
-                <button ref={lbRandomRef} className="lb-random-btn" type="button" title="Generate random callsign">↻</button>
+            <div className="lb-modal">
+
+              <div className="lb-main">
+                <p className="lb-header">GAME OVER</p>
+
+                <div className="lb-score-block">
+                  <p ref={lbScoreRef} className="lb-score-value">0</p>
+                  <p className="lb-label">FINAL SCORE</p>
+                </div>
+
+                <p ref={lbLoadingRef} className="lb-loading" style={{ display: 'none' }}>CHECKING LEADERBOARD…</p>
+
+                <div ref={lbRankAlertRef} className="lb-rank-alert" style={{ display: 'none' }}>
+                  <span className="lb-rank-alert-icon">▲</span>
+                  <span className="lb-rank-alert-text">NEW LEADERBOARD ENTRY</span>
+                </div>
+
+                <div ref={lbNameSectionRef} className="lb-name-section" style={{ display: 'none' }}>
+                  <input ref={lbInputRef} className="lb-input" maxLength={12} placeholder="NOVA WOLF" autoComplete="off" spellCheck={false} />
+                  <button ref={lbRandomRef} className="lb-random-btn" type="button">↻ Generate callsign</button>
+                  <button ref={lbSubmitRef} className="lb-submit-btn">SUBMIT SCORE</button>
+                </div>
+
+                <div ref={lbBoardRef} className="lb-board" style={{ display: 'flex' }}>
+                  <p className="lb-label">TOP PILOTS</p>
+                  <ol ref={lbListRef} className="lb-list" />
+                </div>
               </div>
-              <button ref={lbSubmitRef} className="lb-submit-btn">SUBMIT SCORE</button>
+
+              <div className="lb-footer">
+                <button ref={lbRetryRef} className="lb-retry-btn">► INSERT COIN TO CONTINUE</button>
+              </div>
+
             </div>
-            <div ref={lbBoardRef} className="lb-board" style={{ display: 'none' }}>
-              <p className="lb-label">TOP PILOTS</p>
-              <ol ref={lbListRef} className="lb-list" />
-            </div>
-            <button ref={lbRetryRef} className="lb-retry-btn">► PLAY AGAIN</button>
           </div>
           <button
             ref={pauseBtnRef}
