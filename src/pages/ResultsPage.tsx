@@ -18,18 +18,18 @@ export default function ResultsPage() {
 
   if (!results) {
     return (
-      <div className="page-shell">
+      <main className="page-shell">
         <h1>Mission Results</h1>
         <p>No mission data available.</p>
         <button className="secondary-action" onClick={() => navigate("/missions")}>
           Select Mission
         </button>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="page-shell">
+    <main className="page-shell">
       <p className="eyebrow">{results.scenarioTitle}</p>
       <h1>Mission Results</h1>
       <p className="result-outcome">{results.outcome}</p>
@@ -62,6 +62,6 @@ export default function ResultsPage() {
       <button className="primary-action" onClick={() => navigate("/missions")}>
         Mission Select
       </button>
-    </div>
+    </main>
   );
 }

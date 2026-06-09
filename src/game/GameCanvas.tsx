@@ -2,7 +2,9 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { track } from '@vercel/analytics';
 import { supabase } from '../lib/supabase';
-import { submitScore, fetchTopScores } from '../lib/scores';
+import { submitScore, fetchTopScores, type Score } from '../lib/scores';
+import LeaderboardOverlay from './LeaderboardOverlay';
+import SettingsPanel from './SettingsPanel';
 
 /* ── callsign generator ──────────────────────────────────────────────── */
 const CALL_PREFIX = [
@@ -1721,7 +1723,6 @@ export default function GameCanvas() {
   const joystickKnobRef  = useRef<HTMLDivElement>(null);
   const lbRankAlertRef   = useRef<HTMLDivElement>(null);
   const lbLoadingRef     = useRef<HTMLParagraphElement>(null);
-  const lbHiRef          = useRef<HTMLSpanElement>(null);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const cheatSectionRef  = useRef<HTMLDivElement>(null);
   const cheatInputRef    = useRef<HTMLInputElement>(null);
@@ -1790,19 +1791,33 @@ export default function GameCanvas() {
     window.addEventListener('keyup',   onUp);
 
     // ── leaderboard qualification check ─────────────────────────────────
+    function renderLbList(scores: Score[], highlightName?: string, highlightScore?: number) {
+      const list = lbListRef.current;
+      if (!list) return;
+      list.replaceChildren(
+        ...scores.map((s, i) => {
+          const li   = document.createElement('li');
+          const rank = document.createElement('span');
+          const name = document.createElement('span');
+          const pts  = document.createElement('span');
+          li.className   = 'lb-list-item' + (s.name === highlightName && s.score === highlightScore ? ' lb-highlight' : '');
+          rank.className = 'lb-rank';
+          name.className = 'lb-name';
+          pts.className  = 'lb-pts';
+          rank.textContent = String(i + 1).padStart(2, '0');
+          name.textContent = s.name;
+          pts.textContent  = s.score.toLocaleString();
+          li.append(rank, name, pts);
+          return li;
+        })
+      );
+    }
+
     const checkLeaderboard = async (score: number) => {
-      const top = await fetchTopScores(5);
+      const { scores: top } = await fetchTopScores(5);
       if (lbLoadingRef.current) lbLoadingRef.current.style.display = 'none';
 
-      if (lbListRef.current) {
-        lbListRef.current.innerHTML = top.map((s, i) =>
-          `<li class="lb-list-item">
-            <span class="lb-rank">${String(i + 1).padStart(2, '0')}</span>
-            <span class="lb-name">${s.name}</span>
-            <span class="lb-pts">${s.score.toLocaleString()}</span>
-          </li>`
-        ).join('');
-      }
+      renderLbList(top);
       if (lbBoardRef.current) lbBoardRef.current.style.display = 'flex';
 
       const qualifies = top.length < 5 || score > top[top.length - 1].score;
@@ -1824,18 +1839,9 @@ export default function GameCanvas() {
       const { score, wave } = lbCapturedRef.current;
 
       await submitScore(name, score, wave);
-      const top = await fetchTopScores(5);
+      const { scores: top } = await fetchTopScores(5);
 
-      if (lbListRef.current) {
-        lbListRef.current.innerHTML = top.map((s, i) => {
-          const highlight = s.score === score && s.name === name;
-          return `<li class="lb-list-item${highlight ? ' lb-highlight' : ''}">
-            <span class="lb-rank">${String(i + 1).padStart(2, '0')}</span>
-            <span class="lb-name">${s.name}</span>
-            <span class="lb-pts">${s.score.toLocaleString()}</span>
-          </li>`;
-        }).join('');
-      }
+      renderLbList(top, name, score);
 
       if (lbRankAlertRef.current)   lbRankAlertRef.current.style.display   = 'none';
       if (lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'none';
@@ -1859,10 +1865,28 @@ export default function GameCanvas() {
     const retryEl  = lbRetryRef.current!;
     const randomEl = lbRandomRef.current!;
 
+    const handleFocusTrap = (e: KeyboardEvent) => {
+      const overlay = lbOverlayRef.current;
+      if (!overlay || overlay.style.display === 'none') return;
+      if (e.key !== 'Tab') return;
+      const focusable = Array.from(
+        overlay.querySelectorAll<HTMLElement>('button:not([disabled]), input, [tabindex]:not([tabindex="-1"])')
+      ).filter(el => !el.closest('[style*="display: none"]') && !el.closest('[style*="display:none"]'));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last  = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus();
+      }
+    };
+
     submitEl.addEventListener('click', handleLbSubmit);
     inputEl.addEventListener('keydown', handleLbKey);
     retryEl.addEventListener('click', handleRetry);
     randomEl.addEventListener('click', handleRandomize);
+    document.addEventListener('keydown', handleFocusTrap);
 
     // ── scroll arrow click (desktop mouse) ──────────────────────────────
     const handleBriefClick = (e: MouseEvent) => {
@@ -2010,13 +2034,22 @@ export default function GameCanvas() {
         deskFillRef.current.style.width    = `${pct}%`;
       }
       if (deskLogRef.current) {
-        deskLogRef.current.innerHTML = g.scoreLog.map(e => {
-          const alpha = Math.max(0.2, 1 - e.age / 14).toFixed(2);
-          return `<li class="desk-log-item" style="opacity:${alpha}">
-            <span class="desk-log-label">${e.label}</span>
-            <span class="desk-log-pts">+${e.pts.toLocaleString()}</span>
-          </li>`;
-        }).join('');
+        deskLogRef.current.replaceChildren(
+          ...g.scoreLog.map(e => {
+            const alpha = Math.max(0.2, 1 - e.age / 14).toFixed(2);
+            const li    = document.createElement('li');
+            const lbl   = document.createElement('span');
+            const pts   = document.createElement('span');
+            li.className  = 'desk-log-item';
+            li.style.opacity = alpha;
+            lbl.className = 'desk-log-label';
+            pts.className = 'desk-log-pts';
+            lbl.textContent = e.label;
+            pts.textContent = `+${e.pts.toLocaleString()}`;
+            li.append(lbl, pts);
+            return li;
+          })
+        );
       }
 
       // HUD controls — CSS @media (pointer: coarse) handles touch-only visibility;
@@ -2052,7 +2085,6 @@ export default function GameCanvas() {
         if (g.phase === 'over' && lbOverlayRef.current.style.display === 'none') {
           lbCapturedRef.current = { score: g.score, wave: g.wave };
           if (lbScoreRef.current)       lbScoreRef.current.textContent         = g.score.toLocaleString();
-          if (lbHiRef.current)          lbHiRef.current.textContent            = g.hi.toLocaleString();
           if (lbInputRef.current)       lbInputRef.current.value               = randomCallsign();
           if (lbRankAlertRef.current)   lbRankAlertRef.current.style.display   = 'none';
           if (lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'none';
@@ -2088,6 +2120,7 @@ export default function GameCanvas() {
       inputEl.removeEventListener('keydown', handleLbKey);
       retryEl.removeEventListener('click', handleRetry);
       randomEl.removeEventListener('click', handleRandomize);
+      document.removeEventListener('keydown', handleFocusTrap);
       canvas.removeEventListener('click', handleBriefClick);
       pauseEl.removeEventListener('pointerdown', handlePauseDown);
       settingsEl.removeEventListener('pointerdown', toggleSettings);
@@ -2169,42 +2202,20 @@ export default function GameCanvas() {
               onTouchCancel={() => gsRef.current.keys.delete('z')}
             >FIRE</button>
           </div>
-          <div ref={lbOverlayRef} className="lb-overlay" style={{ display: 'none' }}>
-            <div className="lb-modal">
-
-              <div className="lb-main">
-                <p className="lb-header">GAME OVER</p>
-
-                <div className="lb-score-block">
-                  <p ref={lbScoreRef} className="lb-score-value">0</p>
-                  <p className="lb-label">FINAL SCORE</p>
-                </div>
-
-                <p ref={lbLoadingRef} className="lb-loading" style={{ display: 'none' }}>CHECKING LEADERBOARD…</p>
-
-                <div ref={lbRankAlertRef} className="lb-rank-alert" style={{ display: 'none' }}>
-                  <span className="lb-rank-alert-icon">▲</span>
-                  <span className="lb-rank-alert-text">NEW LEADERBOARD ENTRY</span>
-                </div>
-
-                <div ref={lbNameSectionRef} className="lb-name-section" style={{ display: 'none' }}>
-                  <input ref={lbInputRef} className="lb-input" maxLength={12} placeholder="NOVA WOLF" autoComplete="off" spellCheck={false} />
-                  <button ref={lbRandomRef} className="lb-random-btn" type="button">↻ Generate callsign</button>
-                  <button ref={lbSubmitRef} className="lb-submit-btn">SUBMIT SCORE</button>
-                </div>
-
-                <div ref={lbBoardRef} className="lb-board" style={{ display: 'flex' }}>
-                  <p className="lb-label">TOP PILOTS</p>
-                  <ol ref={lbListRef} className="lb-list" />
-                </div>
-              </div>
-
-              <div className="lb-footer">
-                <button ref={lbRetryRef} className="lb-retry-btn">► INSERT COIN TO CONTINUE</button>
-              </div>
-
-            </div>
-          </div>
+          <LeaderboardOverlay
+            overlayRef={lbOverlayRef}
+            scoreRef={lbScoreRef}
+            loadingRef={lbLoadingRef}
+            rankAlertRef={lbRankAlertRef}
+            nameSectionRef={lbNameSectionRef}
+            inputRef={lbInputRef}
+            randomRef={lbRandomRef}
+            submitRef={lbSubmitRef}
+            boardRef={lbBoardRef}
+            listRef={lbListRef}
+            retryRef={lbRetryRef}
+            onTouchKeys={() => {}}
+          />
           <button
             ref={pauseBtnRef}
             className="pause-btn"
@@ -2219,43 +2230,17 @@ export default function GameCanvas() {
             aria-label="Settings"
           >⚙</button>
 
-          <div ref={settingsPanelRef} className="settings-panel" style={{ display: 'none' }}>
-            <p className="settings-title">— SETTINGS —</p>
-            <button
-              className="settings-item"
-              onClick={() => {
-                if (!cheatSectionRef.current) return;
-                const open = cheatSectionRef.current.style.display !== 'none';
-                cheatSectionRef.current.style.display = open ? 'none' : 'flex';
-                if (!open && cheatInputRef.current) cheatInputRef.current.focus();
-              }}
-            >CHEAT CODES</button>
-            <div ref={cheatSectionRef} className="cheat-section" style={{ display: 'none' }}>
-              <div className="cheat-row">
-                <input
-                  ref={cheatInputRef}
-                  className="cheat-input"
-                  placeholder="ENTER CODE"
-                  maxLength={20}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                <button
-                  className="cheat-go-btn"
-                  onClick={() => {
-                    const result = processCheat(gsRef.current, cheatInputRef.current?.value ?? '');
-                    if (cheatStatusRef.current) cheatStatusRef.current.textContent = result;
-                    if (cheatInputRef.current) cheatInputRef.current.value = '';
-                  }}
-                >GO</button>
-              </div>
-              <p ref={cheatStatusRef} className="cheat-status"></p>
-            </div>
-            <button
-              className="settings-item settings-close"
-              onClick={() => { if (settingsPanelRef.current) settingsPanelRef.current.style.display = 'none'; }}
-            >CLOSE</button>
-          </div>
+          <SettingsPanel
+            panelRef={settingsPanelRef}
+            cheatSectionRef={cheatSectionRef}
+            cheatInputRef={cheatInputRef}
+            cheatStatusRef={cheatStatusRef}
+            onCheatSubmit={() => {
+              const result = processCheat(gsRef.current, cheatInputRef.current?.value ?? '');
+              if (cheatStatusRef.current) cheatStatusRef.current.textContent = result;
+              if (cheatInputRef.current) cheatInputRef.current.value = '';
+            }}
+          />
 
           <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
             <div className="touch-row">

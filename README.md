@@ -2,48 +2,57 @@
 
 A browser-based planetary defense game in two modes: a pixel-art arcade shooter and a mission-planning strategy console.
 
-## Modes
+Live: https://neo-control.vercel.app
 
-### Arcade — NEO Control
-Classic space invaders reimagined with a narrative. Shoot through six waves of Zorgon fleet formations, deflect gravity rocks with physics-accurate bullet bending, and make tactical route choices that alter the next wave's difficulty and score multipliers.
+---
 
-- Pixel-art canvas renderer (no libraries — raw `CanvasRenderingContext2D`)
-- Gravity field: rocks exert real pull on your bullets and player ship
-- Shield + blast abilities with cooldowns
-- Intercepted-transmission briefings with branching route choices (e.g., gravity sector vs. high-velocity sector)
-- Persistent hi-score across retries
+## Overview
 
-Controls: `← →` move · `Z` or `SPACE` shoot · `X` shield · `C` blast · `ESC` menu
+You're a space cadet who picked up the wrong phone. NEO Control puts you in charge of defending Earth across two modes: an arcade shooter where you blast through six waves of Zorgon fleet formations, and a mission console where you assign defense maneuvers to incoming asteroid threats and watch trajectories update in real time.
 
-### Mission Console — Planetary Defense
-Turn-based asteroid threat management with a live orbital simulation.
+---
 
-- Assign one of four defense maneuvers (Kinetic Nudge, Fragment, Gravity Tug, Observe) to each incoming threat
-- Orbital viz updates in real time as sim-days advance; Moon moves and affects trajectories
-- Lunar assist mechanic: a deflected path that clips the Moon's gravity window gets a free bonus deflection — but moon-impact risk rises
-- Random alien transmission events shift threat positions mid-mission
-- Score formula weighs deflection quality, resource cost, debris risk, and moon damage
+## Tech Stack
 
-Three scenarios included: Training Run (one low-risk rock), Big Rock Bad Timing (high-risk, short window), Twin Threat (two rocks, one plan each).
+| Technology | Why I chose it |
+|---|---|
+| React 19 + TypeScript | Component model for overlays and pages; TypeScript catches shape mismatches at the canvas/DOM boundary |
+| Vite | Fast HMR during canvas-heavy development; no config overhead |
+| React Router v7 | Separates arcade, mission console, and results into discrete routes without a full SPA framework |
+| Canvas 2D API (no game lib) | Full control over pixel rendering, custom physics, and RAF loop without bundle weight |
+| D3 (orbital viz only) | Geometry math for the orbital simulation — used surgically, not as a rendering layer |
+| Supabase | Anonymous insert/select for the arcade leaderboard; zero-auth setup matches the scope |
+| Vercel Analytics | Single-line integration for page-level usage data |
 
-## Stack
+---
 
-- React 19 + TypeScript
-- Vite 8
-- React Router v7
-- D3 (orbital viz geometry)
+## Getting Started
 
-## Run locally
+**Prerequisites:** Node 18+, npm
 
 ```bash
+git clone https://github.com/amandarae19/neo-control
+cd neo-control
 npm install
+
+# Copy env template and fill in your Supabase credentials
+cp .env.example .env.local
+
 npm run dev
 ```
 
-## Test
+The app runs at `http://localhost:5173` by default.
 
-```bash
-npm test
-```
+---
 
-Covers `predictThreat` and `calculateMissionScore` — the core scoring and deflection logic.
+## Deployment
+
+Deployed via Vercel. Pushes to `main` trigger automatic builds. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the Vercel environment variables dashboard.
+
+---
+
+## Latest Updates
+
+- **2026-06** — Arcade leaderboard with Supabase: top-5 display, new-entry detection, callsign input
+- **2026-06** — Full accessibility pass: dialog role + focus trap on game over, aria labels, focus-visible rings, semantic landmarks
+- **2026-06** — Mobile controls: thumbs-at-corners layout, joystick + FIRE button, HUD inset on touch devices
