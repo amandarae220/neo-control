@@ -1715,6 +1715,8 @@ export default function GameCanvas() {
   const settingsBtnRef   = useRef<HTMLButtonElement>(null);
   const joystickBaseRef  = useRef<HTMLDivElement>(null);
   const joystickKnobRef  = useRef<HTMLDivElement>(null);
+  const lbRankAlertRef   = useRef<HTMLDivElement>(null);
+  const lbLoadingRef     = useRef<HTMLParagraphElement>(null);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const cheatSectionRef  = useRef<HTMLDivElement>(null);
   const cheatInputRef    = useRef<HTMLInputElement>(null);
@@ -1782,6 +1784,28 @@ export default function GameCanvas() {
     window.addEventListener('keydown', onDown);
     window.addEventListener('keyup',   onUp);
 
+    // ── leaderboard qualification check ─────────────────────────────────
+    const checkLeaderboard = async (score: number) => {
+      const top = await fetchTopScores(10);
+      if (lbLoadingRef.current) lbLoadingRef.current.style.display = 'none';
+      const qualifies = top.length < 10 || score > top[top.length - 1].score;
+      if (qualifies) {
+        if (lbRankAlertRef.current)   lbRankAlertRef.current.style.display   = 'flex';
+        if (lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'flex';
+      } else {
+        if (lbListRef.current) {
+          lbListRef.current.innerHTML = top.map((s, i) =>
+            `<li class="lb-list-item">
+              <span class="lb-rank">${String(i + 1).padStart(2, '0')}</span>
+              <span class="lb-name">${s.name}</span>
+              <span class="lb-pts">${s.score.toLocaleString()}</span>
+            </li>`
+          ).join('');
+        }
+        if (lbBoardRef.current) lbBoardRef.current.style.display = 'flex';
+      }
+    };
+
     // ── leaderboard handlers ─────────────────────────────────────────────
     const handleLbSubmit = async () => {
       const submitBtn = lbSubmitRef.current;
@@ -1806,8 +1830,9 @@ export default function GameCanvas() {
         }).join('');
       }
 
+      if (lbRankAlertRef.current)   lbRankAlertRef.current.style.display   = 'none';
       if (lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'none';
-      if (lbBoardRef.current)       lbBoardRef.current.style.display = 'flex';
+      if (lbBoardRef.current)       lbBoardRef.current.style.display       = 'flex';
     };
 
     const handleLbKey = (e: KeyboardEvent) => {
@@ -2019,15 +2044,21 @@ export default function GameCanvas() {
       if (lbOverlayRef.current) {
         if (g.phase === 'over' && lbOverlayRef.current.style.display === 'none') {
           lbCapturedRef.current = { score: g.score, wave: g.wave };
-          if (lbScoreRef.current) lbScoreRef.current.textContent = g.score.toLocaleString();
-          if (lbInputRef.current) lbInputRef.current.value = randomCallsign();
-          if (!supabase && lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'none';
+          if (lbScoreRef.current)       lbScoreRef.current.textContent         = g.score.toLocaleString();
+          if (lbInputRef.current)       lbInputRef.current.value               = randomCallsign();
+          if (lbRankAlertRef.current)   lbRankAlertRef.current.style.display   = 'none';
+          if (lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'none';
+          if (lbBoardRef.current)       lbBoardRef.current.style.display       = 'none';
+          if (lbLoadingRef.current)     lbLoadingRef.current.style.display     = supabase ? 'block' : 'none';
           lbOverlayRef.current.style.display = 'flex';
+          if (supabase) checkLeaderboard(g.score);
         }
         if (g.phase !== 'over') {
           lbOverlayRef.current.style.display = 'none';
-          if (lbNameSectionRef.current) lbNameSectionRef.current.style.display = supabase ? 'flex' : 'none';
-          if (lbBoardRef.current) lbBoardRef.current.style.display = 'none';
+          if (lbRankAlertRef.current)   lbRankAlertRef.current.style.display   = 'none';
+          if (lbNameSectionRef.current) lbNameSectionRef.current.style.display = 'none';
+          if (lbBoardRef.current)       lbBoardRef.current.style.display       = 'none';
+          if (lbLoadingRef.current)     lbLoadingRef.current.style.display     = 'none';
           if (lbInputRef.current) lbInputRef.current.value = '';
           if (lbSubmitRef.current) {
             lbSubmitRef.current.disabled = false;
@@ -2138,7 +2169,12 @@ export default function GameCanvas() {
               <p className="lb-label">YOUR SCORE</p>
               <p ref={lbScoreRef} className="lb-score-value">0</p>
             </div>
-            <div ref={lbNameSectionRef} className="lb-name-section">
+            <p ref={lbLoadingRef} className="lb-loading" style={{ display: 'none' }}>CHECKING LEADERBOARD…</p>
+            <div ref={lbRankAlertRef} className="lb-rank-alert" style={{ display: 'none' }}>
+              <span className="lb-rank-alert-icon">▲</span>
+              <span className="lb-rank-alert-text">NEW LEADERBOARD ENTRY</span>
+            </div>
+            <div ref={lbNameSectionRef} className="lb-name-section" style={{ display: 'none' }}>
               <p className="lb-label">ENTER CALLSIGN</p>
               <div className="lb-callsign-row">
                 <input ref={lbInputRef} className="lb-input" maxLength={12} placeholder="NOVA WOLF" autoComplete="off" spellCheck={false} />
