@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 
 type Props = {
   overlayRef:      RefObject<HTMLDivElement>;
-  scoreRef:        RefObject<HTMLParagraphElement>;
+  scoreRef:        RefObject<HTMLOutputElement>;
   loadingRef:      RefObject<HTMLParagraphElement>;
   rankAlertRef:    RefObject<HTMLDivElement>;
   nameSectionRef:  RefObject<HTMLDivElement>;
@@ -12,7 +12,6 @@ type Props = {
   boardRef:        RefObject<HTMLDivElement>;
   listRef:         RefObject<HTMLOListElement>;
   retryRef:        RefObject<HTMLButtonElement>;
-  onTouchKeys:     (key: string, down: boolean) => void;
 };
 
 export default function LeaderboardOverlay({
@@ -30,10 +29,10 @@ export default function LeaderboardOverlay({
     >
       <div className="lb-modal">
         <div className="lb-main">
-          <p className="lb-header">GAME OVER</p>
+          <h2 className="lb-header">GAME OVER</h2>
 
           <div className="lb-score-block">
-            <p ref={scoreRef} className="lb-score-value">0</p>
+            <output ref={scoreRef} className="lb-score-value">0</output>
             <p className="lb-label">FINAL SCORE</p>
           </div>
 

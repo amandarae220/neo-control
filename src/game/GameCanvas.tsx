@@ -1695,7 +1695,7 @@ export default function GameCanvas() {
   const choiceOverlayRef = useRef<HTMLDivElement>(null);
   const hudControlsRef   = useRef<HTMLDivElement>(null);
   const lbOverlayRef     = useRef<HTMLDivElement>(null);
-  const lbScoreRef       = useRef<HTMLParagraphElement>(null);
+  const lbScoreRef       = useRef<HTMLOutputElement>(null);
   const lbNameSectionRef = useRef<HTMLDivElement>(null);
   const lbBoardRef       = useRef<HTMLDivElement>(null);
   const lbInputRef       = useRef<HTMLInputElement>(null);
@@ -1768,7 +1768,7 @@ export default function GameCanvas() {
             const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile);
             ng.phase  = 'intro';
             ng.introT = 0;
-            Object.assign(gs, ng);
+            gsRef.current = ng;
           }
         }
       }
@@ -1780,7 +1780,7 @@ export default function GameCanvas() {
           const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, profile);
           ng.phase  = 'intro';
           ng.introT = 0;
-          Object.assign(gs, ng);
+          gsRef.current = ng;
         }
       }
 
@@ -1838,8 +1838,22 @@ export default function GameCanvas() {
       const name  = (lbInputRef.current?.value.trim().toUpperCase().slice(0, 12)) || 'PILOT';
       const { score, wave } = lbCapturedRef.current;
 
-      await submitScore(name, score, wave);
-      const { scores: top } = await fetchTopScores(5);
+      const { error: submitError } = await submitScore(name, score, wave);
+      if (submitError) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'SUBMIT SCORE';
+        if (lbLoadingRef.current) {
+          lbLoadingRef.current.textContent = 'SUBMIT FAILED — TRY AGAIN';
+          lbLoadingRef.current.style.display = 'block';
+        }
+        return;
+      }
+
+      const { scores: top, error: fetchError } = await fetchTopScores(5);
+      if (fetchError && lbLoadingRef.current) {
+        lbLoadingRef.current.textContent = 'SCORE SAVED — LEADERBOARD UNAVAILABLE';
+        lbLoadingRef.current.style.display = 'block';
+      }
 
       renderLbList(top, name, score);
 
@@ -2134,6 +2148,7 @@ export default function GameCanvas() {
 
   return (
     <div className="game-wrap">
+      <h1 className="sr-only">NEO Control — Arcade Game</h1>
       <div className="game-row">
         {/* ── desktop left panel ── */}
         <aside className="desk-panel desk-panel-left" aria-label="Pilot status">
@@ -2182,7 +2197,7 @@ export default function GameCanvas() {
                     const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile);
                     ng.phase  = 'intro';
                     ng.introT = 0;
-                    Object.assign(gs, ng);
+                    gsRef.current = ng;
                   }
                 }
                 return;
@@ -2214,7 +2229,6 @@ export default function GameCanvas() {
             boardRef={lbBoardRef}
             listRef={lbListRef}
             retryRef={lbRetryRef}
-            onTouchKeys={() => {}}
           />
           <button
             ref={pauseBtnRef}
@@ -2252,7 +2266,7 @@ export default function GameCanvas() {
                     const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0]);
                     ng.phase  = 'intro';
                     ng.introT = 0;
-                    Object.assign(gs, ng);
+                    gsRef.current = ng;
                   }
                 }}
               >[1]</button>
@@ -2264,7 +2278,7 @@ export default function GameCanvas() {
                     const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1]);
                     ng.phase  = 'intro';
                     ng.introT = 0;
-                    Object.assign(gs, ng);
+                    gsRef.current = ng;
                   }
                 }}
               >[2]</button>

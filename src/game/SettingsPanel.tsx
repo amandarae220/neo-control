@@ -35,6 +35,7 @@ export default function SettingsPanel({
             maxLength={20}
             autoComplete="off"
             spellCheck={false}
+            aria-label="Cheat code"
           />
           <button className="cheat-go-btn" onClick={onCheatSubmit}>GO</button>
         </div>

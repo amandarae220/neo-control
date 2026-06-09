@@ -11,10 +11,25 @@ type ResultsState = {
   scenarioTitle: string;
 };
 
+function isResultsState(s: unknown): s is ResultsState {
+  if (!s || typeof s !== 'object') return false;
+  const r = s as Record<string, unknown>;
+  return (
+    typeof r.score             === 'number' &&
+    typeof r.outcome           === 'string' &&
+    typeof r.deflectedCount    === 'number' &&
+    typeof r.totalThreats      === 'number' &&
+    typeof r.moonCollisionCount === 'number' &&
+    typeof r.highestImpactRisk === 'number' &&
+    typeof r.highestMoonRisk   === 'number' &&
+    typeof r.scenarioTitle     === 'string'
+  );
+}
+
 export default function ResultsPage() {
   const { state } = useLocation();
   const navigate = useNavigate();
-  const results = state as ResultsState | null;
+  const results = isResultsState(state) ? state : null;
 
   if (!results) {
     return (
