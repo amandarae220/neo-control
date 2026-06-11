@@ -1340,6 +1340,55 @@ button:disabled {
   }
 }
 
+/* ── SIDI confirmation modal ── */
+.sidi-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 4, 10, 0.88);
+  z-index: 200;
+  backdrop-filter: blur(4px);
+}
+
+.sidi-modal {
+  width: min(100%, 440px);
+  display: grid;
+  gap: 14px;
+  padding: 24px;
+  border: 1px solid rgba(247, 199, 106, 0.45);
+  border-radius: 2px;
+  background:
+    linear-gradient(180deg, rgba(247, 199, 106, 0.06), transparent 55%),
+    rgba(8, 7, 14, 0.98);
+  box-shadow:
+    0 0 0 1px rgba(247, 199, 106, 0.12),
+    0 28px 80px rgba(0, 0, 0, 0.6);
+}
+
+.sidi-modal h2 {
+  color: var(--amber);
+  font-size: clamp(1.4rem, 4vw, 2rem);
+  text-shadow: 0 0 20px rgba(247, 199, 106, 0.4);
+}
+
+.sidi-body {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.sidi-body strong {
+  color: var(--heading);
+}
+
+.sidi-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
 /* ── admin page ── */
 .admin-gate {
   min-height: 100vh;
@@ -1360,10 +1409,23 @@ button:disabled {
   letter-spacing: 0.1em;
 }
 
+.admin-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
 .admin-meta {
   color: var(--muted);
   font-size: 0.9rem;
   margin: 4px 0 24px;
+}
+
+.admin-last-updated {
+  color: var(--muted);
+  opacity: 0.7;
 }
 
 .admin-stats-row {

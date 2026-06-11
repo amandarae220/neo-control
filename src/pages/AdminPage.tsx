@@ -92,6 +92,17 @@ function splitBy(sessions: SessionRow[], key: keyof SessionRow): Bar[] {
     .map(([label, value]) => ({ label, value }));
 }
 
+function pathChoiceSplit(sessions: SessionRow[], waveNum: number): Bar[] {
+  const key = `wave_${waveNum}_path`;
+  const c1  = sessions.filter(s => s.path_choices?.[key] === 1).length;
+  const c2  = sessions.filter(s => s.path_choices?.[key] === 2).length;
+  if (c1 === 0 && c2 === 0) return [];
+  return [
+    { label: 'Path 1', value: c1 },
+    { label: 'Path 2', value: c2 },
+  ];
+}
+
 function replayDistribution(sessions: SessionRow[]): Bar[] {
   const byPlayer: Record<string, number> = {};
   sessions.forEach(s => { byPlayer[s.player_id] = Math.max(byPlayer[s.player_id] ?? 0, s.replay_number); });
@@ -133,11 +144,22 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 // ── component ────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
-  const [input,    setInput]    = useState('');
-  const [authed,   setAuthed]   = useState(false);
-  const [sessions, setSessions] = useState<SessionRow[]>([]);
-  const [error,    setError]    = useState<string | null>(null);
-  const [loading,  setLoading]  = useState(false);
+  const [input,       setInput]       = useState('');
+  const [authed,      setAuthed]      = useState(false);
+  const [sessions,    setSessions]    = useState<SessionRow[]>([]);
+  const [error,       setError]       = useState<string | null>(null);
+  const [loading,     setLoading]     = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    fetchSessions().then(({ sessions: rows, error: err }) => {
+      setSessions(rows);
+      setError(err);
+      setLoading(false);
+      if (!err) setLastUpdated(new Date());
+    });
+  };
 
   const attempt = () => {
     if (!PASS) { setError('VITE_ADMIN_PASS is not set.'); return; }
@@ -146,13 +168,7 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    if (!authed) return;
-    setLoading(true);
-    fetchSessions().then(({ sessions: rows, error: err }) => {
-      setSessions(rows);
-      setError(err);
-      setLoading(false);
-    });
+    if (authed) load();
   }, [authed]);
 
   if (!authed) {
@@ -195,8 +211,25 @@ export default function AdminPage() {
   return (
     <main className="page-shell">
       <p className="eyebrow">NEO Control · Admin</p>
-      <h1>Player Analytics</h1>
-      <p className="admin-meta">{sessions.length} sessions · {uniquePlayers} unique players</p>
+      <div className="admin-header-row">
+        <h1>Player Analytics</h1>
+        <button
+          className="secondary-action compact"
+          onClick={load}
+          disabled={loading}
+          aria-label="Refresh analytics data"
+        >
+          {loading ? 'REFRESHING…' : '↻ REFRESH'}
+        </button>
+      </div>
+      <p className="admin-meta">
+        {sessions.length} sessions · {uniquePlayers} unique players
+        {lastUpdated && (
+          <span className="admin-last-updated">
+            · Last updated {lastUpdated.toLocaleDateString()} {lastUpdated.toLocaleTimeString()}
+          </span>
+        )}
+      </p>
 
       <div className="admin-stats-row">
         <Stat label="Avg Score"      value={avgScore.toLocaleString()} />
@@ -229,6 +262,16 @@ export default function AdminPage() {
         <ChartCard title="Browser">
           <BarChart data={splitBy(sessions, 'browser')} color="var(--green)" />
         </ChartCard>
+
+        {[2, 4, 6].map(wn => {
+          const d = pathChoiceSplit(sessions, wn);
+          if (d.length === 0) return null;
+          return (
+            <ChartCard key={wn} title={`Wave ${wn} Path Choice`}>
+              <BarChart data={d} color="var(--amber)" />
+            </ChartCard>
+          );
+        })}
       </div>
 
       <div className="admin-card" style={{ marginTop: 24 }}>

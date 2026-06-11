@@ -315,6 +315,8 @@ interface GS {
   gtaDroneShootT:      number;
   stickX:              number;
   buckshot:        boolean;
+  buckshotUsed:    boolean;
+  pathChoices:     Partial<Record<number, 1 | 2>>;
   missionKind:     'approach' | 'eliminate';
   stationProgress: number;
   dockSeq:         boolean;
@@ -476,11 +478,13 @@ function mkRock(id: number, profile: PhysicsProfile = DEFAULT_PROFILE): GravRock
 }
 
 function newGame(
-  wave    = 1,
-  score   = 0,
-  hi      = 0,
-  lives   = 3,
+  wave         = 1,
+  score        = 0,
+  hi           = 0,
+  lives        = 3,
   profile: PhysicsProfile = DEFAULT_PROFILE,
+  buckshotUsed = false,
+  pathChoices: Partial<Record<number, 1 | 2>> = {},
 ): GS {
   const enemies = buildWave(wave, profile);
   return {
@@ -506,6 +510,8 @@ function newGame(
     scoreLog:        [],
     activeProfile:   profile,
     buckshot:        false,
+    buckshotUsed,
+    pathChoices,
   };
 }
 
@@ -1697,8 +1703,9 @@ function processCheat(gs: GS, raw: string): string {
       gs.hi = Math.max(gs.hi, gs.score);
       return '+10,000 PTS';
     case 'SIDI':
-      gs.buckshot = !gs.buckshot;
-      return gs.buckshot ? 'BUCKSHOT ON' : 'BUCKSHOT OFF';
+      if (gs.buckshot)     { gs.buckshot = false; return 'BUCKSHOT OFF'; }
+      if (gs.buckshotUsed) return 'SIDI ALREADY USED THIS GAME';
+      return '__SIDI_CONFIRM__';
     default:
       return 'UNKNOWN CODE';
   }
@@ -1736,6 +1743,7 @@ export default function GameCanvas() {
   const trackedAscentRef = useRef(false);
   const gameStartRef     = useRef<number>(0);
   const replayNumRef     = useRef<number>(1);
+  const cheatConfirmRef  = useRef<HTMLDivElement>(null);
   const pauseBtnRef      = useRef<HTMLButtonElement>(null);
   const settingsBtnRef   = useRef<HTMLButtonElement>(null);
   const joystickBaseRef  = useRef<HTMLDivElement>(null);
@@ -1784,7 +1792,7 @@ export default function GameCanvas() {
             gs.phase  = 'intro';
             gs.introT = 0;
           } else {
-            const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile);
+            const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile, gs.buckshotUsed, gs.pathChoices);
             ng.phase  = 'intro';
             ng.introT = 0;
             gsRef.current = ng;
@@ -1795,8 +1803,10 @@ export default function GameCanvas() {
       if ((e.key === '1' || e.key === '2') && gsRef.current.phase === 'brief') {
         const gs = gsRef.current;
         if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-          const profile = gs.txProfiles[e.key === '1' ? 0 : 1];
-          const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, profile);
+          const choiceIdx = e.key === '1' ? 0 : 1;
+          const choiceNum = (e.key === '1' ? 1 : 2) as 1 | 2;
+          const profile   = gs.txProfiles[choiceIdx];
+          const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, profile, gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: choiceNum });
           ng.phase  = 'intro';
           ng.introT = 0;
           gsRef.current = ng;
@@ -1887,6 +1897,9 @@ export default function GameCanvas() {
 
     const handleRetry = () => {
       gsRef.current = newGame(1, 0, gsRef.current.hi, 3);
+      trackedPhaseRef.current  = 'brief';
+      trackedWaveRef.current   = 0;
+      trackedAscentRef.current = false;
     };
 
     const handleRandomize = () => {
@@ -1958,8 +1971,13 @@ export default function GameCanvas() {
     };
     const submitCheat = () => {
       const result = processCheat(gsRef.current, cheatInput.value);
-      cheatStatus.textContent = result;
       cheatInput.value = '';
+      if (result === '__SIDI_CONFIRM__') {
+        settingPanel.style.display = 'none';
+        if (cheatConfirmRef.current) cheatConfirmRef.current.style.display = 'flex';
+      } else {
+        cheatStatus.textContent = result;
+      }
     };
     cheatInput.addEventListener('keydown', handleCheatKey);
 
@@ -2048,6 +2066,9 @@ export default function GameCanvas() {
           browser:          getBrowser(),
           replay_number:    replayNumRef.current,
           duration_seconds: Math.round((Date.now() - gameStartRef.current) / 1000),
+          path_choices:     Object.fromEntries(
+            Object.entries(g.pathChoices).map(([w, c]) => [`wave_${w}_path`, c])
+          ) as Record<string, 1 | 2>,
         });
       }
       trackedPhaseRef.current = g.phase;
@@ -2224,7 +2245,7 @@ export default function GameCanvas() {
                     gs.phase  = 'intro';
                     gs.introT = 0;
                   } else {
-                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile);
+                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile, gs.buckshotUsed, gs.pathChoices);
                     ng.phase  = 'intro';
                     ng.introT = 0;
                     gsRef.current = ng;
@@ -2281,8 +2302,13 @@ export default function GameCanvas() {
             cheatStatusRef={cheatStatusRef}
             onCheatSubmit={() => {
               const result = processCheat(gsRef.current, cheatInputRef.current?.value ?? '');
-              if (cheatStatusRef.current) cheatStatusRef.current.textContent = result;
               if (cheatInputRef.current) cheatInputRef.current.value = '';
+              if (result === '__SIDI_CONFIRM__') {
+                if (settingsPanelRef.current) settingsPanelRef.current.style.display = 'none';
+                if (cheatConfirmRef.current)  cheatConfirmRef.current.style.display  = 'flex';
+              } else {
+                if (cheatStatusRef.current) cheatStatusRef.current.textContent = result;
+              }
             }}
           />
 
@@ -2293,7 +2319,7 @@ export default function GameCanvas() {
                 onTouchEnd={() => {
                   const gs = gsRef.current;
                   if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0]);
+                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 1 as const });
                     ng.phase  = 'intro';
                     ng.introT = 0;
                     gsRef.current = ng;
@@ -2305,7 +2331,7 @@ export default function GameCanvas() {
                 onTouchEnd={() => {
                   const gs = gsRef.current;
                   if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1]);
+                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 2 as const });
                     ng.phase  = 'intro';
                     ng.introT = 0;
                     gsRef.current = ng;
@@ -2343,6 +2369,49 @@ export default function GameCanvas() {
         </aside>
       </div>
       <p className="game-hint">← → MOVE &nbsp;&nbsp; Z SHOOT &nbsp;&nbsp; ESC MENU</p>
+
+      {/* SIDI confirmation modal */}
+      <div
+        ref={cheatConfirmRef}
+        className="sidi-overlay"
+        style={{ display: 'none' }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sidi-title"
+      >
+        <div className="sidi-modal">
+          <p className="eyebrow">⚠ SIDI PROTOCOL</p>
+          <h2 id="sidi-title">Activate Buckshot Mode?</h2>
+          <p className="sidi-body">
+            Fires three rounds per trigger — wide spread, unlimited shots.
+            This override is available for <strong>one wave only</strong>.
+            Once the wave ends, buckshot is gone. You cannot reactivate it this game.
+          </p>
+          <p className="sidi-body">Use it wisely.</p>
+          <div className="sidi-actions">
+            <button
+              className="primary-action compact"
+              onClick={() => {
+                const gs = gsRef.current;
+                gs.buckshot     = true;
+                gs.buckshotUsed = true;
+                if (cheatConfirmRef.current)  cheatConfirmRef.current.style.display  = 'none';
+                if (cheatStatusRef.current)   cheatStatusRef.current.textContent     = 'BUCKSHOT ON';
+              }}
+            >
+              PROCEED
+            </button>
+            <button
+              className="secondary-action compact"
+              onClick={() => {
+                if (cheatConfirmRef.current) cheatConfirmRef.current.style.display = 'none';
+              }}
+            >
+              CANCEL
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ export type SessionRow = {
   browser:          string;
   replay_number:    number;
   duration_seconds: number;
+  path_choices?:    Record<string, 1 | 2>;
   created_at?:      string;
 };
 
