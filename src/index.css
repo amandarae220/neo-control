@@ -1339,3 +1339,116 @@ button:disabled {
     line-height: 1;
   }
 }
+
+/* ── admin page ── */
+.admin-gate {
+  min-height: 100vh;
+  display: grid;
+  align-content: center;
+  gap: 20px;
+}
+
+.admin-auth-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-error {
+  color: var(--red);
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+}
+
+.admin-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 4px 0 24px;
+}
+
+.admin-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.admin-stat {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--surface);
+  display: grid;
+  gap: 6px;
+}
+
+.admin-stat-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.admin-stat-value {
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.admin-card {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--surface);
+}
+
+.admin-card-title {
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin: 0 0 12px;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.admin-table th {
+  text-align: left;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(37, 32, 48, 0.5);
+  color: var(--text);
+}
+
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-player-id {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-family: var(--mono);
+}
