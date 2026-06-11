@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { track } from '@vercel/analytics';
 import { supabase } from '../lib/supabase';
 import { submitScore, fetchTopScores, type Score } from '../lib/scores';
+import { submitSession } from '../lib/sessions';
+import { getPlayerId, getAndIncrementPlayCount, getBrowser } from '../lib/player';
 import LeaderboardOverlay from './LeaderboardOverlay';
 import SettingsPanel from './SettingsPanel';
 
@@ -1732,6 +1734,8 @@ export default function GameCanvas() {
   const trackedPhaseRef  = useRef<Phase>('brief');
   const trackedWaveRef   = useRef(0);
   const trackedAscentRef = useRef(false);
+  const gameStartRef     = useRef<number>(0);
+  const replayNumRef     = useRef<number>(1);
   const pauseBtnRef      = useRef<HTMLButtonElement>(null);
   const settingsBtnRef   = useRef<HTMLButtonElement>(null);
   const joystickBaseRef  = useRef<HTMLDivElement>(null);
@@ -2023,6 +2027,8 @@ export default function GameCanvas() {
       const prevPhase = trackedPhaseRef.current;
       if (g.phase === 'play' && (prevPhase === 'brief' || prevPhase === 'intro') && trackedWaveRef.current === 0) {
         track('game_start');
+        gameStartRef.current  = Date.now();
+        replayNumRef.current  = getAndIncrementPlayCount();
       }
       if (g.waveT > 0 && g.wave > trackedWaveRef.current) {
         track('wave_clear', { wave: g.wave, score: g.score });
@@ -2034,6 +2040,15 @@ export default function GameCanvas() {
       }
       if (g.phase === 'over' && prevPhase !== 'over') {
         track('game_over', { wave: g.wave, score: g.score });
+        submitSession({
+          player_id:        getPlayerId(),
+          score:            g.score,
+          wave:             g.wave,
+          device:           isTouch ? 'touch' : 'keyboard',
+          browser:          getBrowser(),
+          replay_number:    replayNumRef.current,
+          duration_seconds: Math.round((Date.now() - gameStartRef.current) / 1000),
+        });
       }
       trackedPhaseRef.current = g.phase;
 
