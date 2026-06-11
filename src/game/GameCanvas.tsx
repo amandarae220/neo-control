@@ -1630,9 +1630,10 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
   ctx.font      = "16px 'VT323', monospace";
   ctx.textAlign = 'left';
 
-  // lives
+  // lives — shift up on touch so the fixed HUD controls bar doesn't overlap
+  const livesY = isTouch ? H - 48 : H - 14;
   for (let i = 0; i < gs.lives; i++)
-    drawSpr(ctx, SPR.player, C.cyan, 14 + i * 16, H - 14, 2);
+    drawSpr(ctx, SPR.player, C.cyan, 14 + i * 16, livesY, 2);
 
   // wave clear / dock complete banner
   if (gs.waveT > 0) {
@@ -2066,10 +2067,10 @@ export default function GameCanvas() {
         );
       }
 
-      // HUD controls — CSS @media (pointer: coarse) handles touch-only visibility;
-      // inline style just gates on play phase vs. everything else
+      // HUD controls — always visible on touch devices (CSS handles it);
+      // only hide during the leaderboard overlay (game over phase)
       if (hudControlsRef.current) {
-        hudControlsRef.current.style.display = g.phase === 'play' ? '' : 'none';
+        hudControlsRef.current.style.display = g.phase === 'over' ? 'none' : '';
       }
 
       // pause button — visible during play on all devices
