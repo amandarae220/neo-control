@@ -312,6 +312,7 @@ interface GS {
   gtaDroneHP:          number;
   gtaDroneShootT:      number;
   stickX:              number;
+  buckshot:        boolean;
   missionKind:     'approach' | 'eliminate';
   stationProgress: number;
   dockSeq:         boolean;
@@ -502,6 +503,7 @@ function newGame(
     totalEnemies:    enemies.length,
     scoreLog:        [],
     activeProfile:   profile,
+    buckshot:        false,
   };
 }
 
@@ -885,8 +887,17 @@ function update(gs: GS, dt: number) {
   /* ── player shoot ── */
   gs.shootT = Math.max(0, gs.shootT - dt);
   const canShoot = gs.keys.has(' ') || gs.keys.has('z');
-  if (canShoot && gs.shootT <= 0 && gs.bullets.filter(b => b.player).length < MAX_BULLETS) {
-    gs.bullets.push({ id: gs.seq++, x: gs.px, y: PY - 12, vx: 0, vy: B_SPD, player: true });
+  const underCap = gs.buckshot || gs.bullets.filter(b => b.player).length < MAX_BULLETS;
+  if (canShoot && gs.shootT <= 0 && underCap) {
+    if (gs.buckshot) {
+      // three-way spread: left, center, right
+      const spread = 55;
+      gs.bullets.push({ id: gs.seq++, x: gs.px,          y: PY - 12, vx: 0,       vy: B_SPD,       player: true });
+      gs.bullets.push({ id: gs.seq++, x: gs.px,          y: PY - 12, vx: -spread, vy: B_SPD * 0.97, player: true });
+      gs.bullets.push({ id: gs.seq++, x: gs.px,          y: PY - 12, vx:  spread, vy: B_SPD * 0.97, player: true });
+    } else {
+      gs.bullets.push({ id: gs.seq++, x: gs.px, y: PY - 12, vx: 0, vy: B_SPD, player: true });
+    }
     gs.shootT = 0.18;
   }
 
@@ -1683,6 +1694,9 @@ function processCheat(gs: GS, raw: string): string {
       gs.score += 10000;
       gs.hi = Math.max(gs.hi, gs.score);
       return '+10,000 PTS';
+    case 'SIDI':
+      gs.buckshot = !gs.buckshot;
+      return gs.buckshot ? 'BUCKSHOT ON' : 'BUCKSHOT OFF';
     default:
       return 'UNKNOWN CODE';
   }
