@@ -1754,6 +1754,11 @@ export default function GameCanvas() {
   const cheatSectionRef  = useRef<HTMLDivElement>(null);
   const cheatInputRef    = useRef<HTMLInputElement>(null);
   const cheatStatusRef   = useRef<HTMLParagraphElement>(null);
+  const autoFireRef      = useRef(false);
+  const autoFireBtnRef   = useRef<HTMLButtonElement>(null);
+  const choice1BtnRef    = useRef<HTMLButtonElement>(null);
+  const choice2BtnRef    = useRef<HTMLButtonElement>(null);
+  const trackedLivesRef  = useRef(3);
 
   useEffect(() => {
     const canvas  = canvasRef.current!;
@@ -1992,7 +1997,7 @@ export default function GameCanvas() {
     // ── analog joystick ─────────────────────────────────────────────────
     const joyBase = joystickBaseRef.current!;
     const joyKnob = joystickKnobRef.current!;
-    const MAX_TRAVEL = 28; // px knob can move from center
+    const MAX_TRAVEL = 38; // px knob can move from center
     let   activeTouchId: number | null = null;
     let   joyCx = 0;
 
@@ -2137,12 +2142,36 @@ export default function GameCanvas() {
         settingsPanelRef.current.style.display = 'none';
       }
 
+      // auto-fire injection
+      if (autoFireRef.current && g.phase === 'play' && !g.paused) {
+        g.keys.add('z');
+      }
+
+      // haptic feedback — hit and death (Android only; no-ops on iOS/desktop)
+      if (g.lives < trackedLivesRef.current) {
+        navigator.vibrate?.(g.lives === 0 ? [80, 30, 80] : 55);
+      }
+      trackedLivesRef.current = g.lives;
+
+      // reset auto-fire when game ends so the button doesn't stay lit on retry
+      if (g.phase === 'over' && autoFireRef.current) {
+        autoFireRef.current = false;
+        g.keys.delete('z');
+        autoFireBtnRef.current?.classList.remove('is-active');
+      }
+
       // briefing choice overlay — touch only, shown only when at bottom of scrollable content
       if (choiceOverlayRef.current) {
         const { maxScroll } = briefScrollBounds(g);
         const atBottom      = maxScroll <= 0 || g.txScroll >= maxScroll - 1;
         const showChoices   = isTouch && g.phase === 'brief' && g.txDone && g.txHasChoice && atBottom;
         choiceOverlayRef.current.style.display = showChoices ? 'flex' : 'none';
+        if (showChoices && choice1BtnRef.current && choice2BtnRef.current) {
+          const l1 = g.txLines.find(l => l.startsWith('[1]'));
+          const l2 = g.txLines.find(l => l.startsWith('[2]'));
+          if (l1) choice1BtnRef.current.textContent = l1.replace('[1] ', '');
+          if (l2) choice2BtnRef.current.textContent = l2.replace('[2] ', '');
+        }
       }
 
       // leaderboard overlay — appears on game over, resets when game restarts
@@ -2261,12 +2290,24 @@ export default function GameCanvas() {
             <div ref={joystickBaseRef} className="joystick-base">
               <div ref={joystickKnobRef} className="joystick-knob" />
             </div>
-            <button
-              className="hud-btn hud-btn-fire"
-              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
-              onTouchEnd={() => gsRef.current.keys.delete('z')}
-              onTouchCancel={() => gsRef.current.keys.delete('z')}
-            >FIRE</button>
+            <div className="hud-actions">
+              <button
+                ref={autoFireBtnRef}
+                className="hud-btn hud-btn-auto"
+                onTouchStart={e => {
+                  e.preventDefault();
+                  autoFireRef.current = !autoFireRef.current;
+                  autoFireBtnRef.current?.classList.toggle('is-active', autoFireRef.current);
+                  if (!autoFireRef.current) gsRef.current.keys.delete('z');
+                }}
+              >AUTO</button>
+              <button
+                className="hud-btn hud-btn-fire"
+                onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
+                onTouchEnd={() => { if (!autoFireRef.current) gsRef.current.keys.delete('z'); }}
+                onTouchCancel={() => { if (!autoFireRef.current) gsRef.current.keys.delete('z'); }}
+              >FIRE</button>
+            </div>
           </div>
           <LeaderboardOverlay
             overlayRef={lbOverlayRef}
@@ -2315,6 +2356,7 @@ export default function GameCanvas() {
           <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
             <div className="touch-row">
               <button
+                ref={choice1BtnRef}
                 className="touch-btn touch-btn-choice"
                 onTouchEnd={() => {
                   const gs = gsRef.current;
@@ -2327,6 +2369,7 @@ export default function GameCanvas() {
                 }}
               >[1]</button>
               <button
+                ref={choice2BtnRef}
                 className="touch-btn touch-btn-choice"
                 onTouchEnd={() => {
                   const gs = gsRef.current;
