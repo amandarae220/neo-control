@@ -399,6 +399,147 @@ function PlayerProgressionCard({ sessions }: { sessions: SessionRow[] }) {
   );
 }
 
+// ── cohort retention table ────────────────────────────────────────────────────
+
+function mondayOf(d: Date): Date {
+  const out = new Date(d);
+  const day = out.getDay();
+  out.setDate(out.getDate() - (day === 0 ? 6 : day - 1));
+  out.setHours(0, 0, 0, 0);
+  return out;
+}
+
+type RetentionCell = { count: number; pct: number } | null;
+type CohortRow = {
+  label:   string;
+  weekStart: Date;
+  players: number;
+  d1:  RetentionCell;
+  d7:  RetentionCell;
+  d30: RetentionCell;
+};
+
+function buildCohorts(sessions: SessionRow[]): { rows: CohortRow[]; totals: Omit<CohortRow, 'label' | 'weekStart'> } {
+  const byPlayer: Record<string, Date[]> = {};
+  sessions.forEach(s => {
+    if (!s.created_at) return;
+    if (!byPlayer[s.player_id]) byPlayer[s.player_id] = [];
+    byPlayer[s.player_id].push(new Date(s.created_at));
+  });
+
+  const playerFirst: Record<string, Date>   = {};
+  const playerDates: Record<string, Date[]> = {};
+  Object.entries(byPlayer).forEach(([pid, dates]) => {
+    const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime());
+    playerFirst[pid] = sorted[0];
+    playerDates[pid] = sorted;
+  });
+
+  const cohortMap: Record<string, { weekStart: Date; pids: string[] }> = {};
+  Object.entries(playerFirst).forEach(([pid, first]) => {
+    const mon = mondayOf(first);
+    const key = mon.toISOString().slice(0, 10);
+    if (!cohortMap[key]) cohortMap[key] = { weekStart: mon, pids: [] };
+    cohortMap[key].pids.push(pid);
+  });
+
+  const today = Date.now();
+
+  const retCell = (pids: string[], days: number): RetentionCell => {
+    const elapsed = (today - Math.min(...pids.map(pid => playerFirst[pid].getTime()))) / 86_400_000;
+    if (elapsed < days) return null; // not enough time has passed
+    const returned = pids.filter(pid => {
+      const first    = playerFirst[pid].getTime();
+      const laterSessions = playerDates[pid].filter(d => d.getTime() > first);
+      return laterSessions.some(d => (d.getTime() - first) / 86_400_000 <= days);
+    }).length;
+    return { count: returned, pct: pids.length ? Math.round((returned / pids.length) * 100) : 0 };
+  };
+
+  const rows: CohortRow[] = Object.entries(cohortMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, { weekStart, pids }]) => ({
+      label:    weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      weekStart,
+      players:  pids.length,
+      d1:  retCell(pids, 1),
+      d7:  retCell(pids, 7),
+      d30: retCell(pids, 30),
+    }));
+
+  const allPids = Object.keys(playerFirst);
+  const totals = {
+    players: allPids.length,
+    d1:  retCell(allPids, 1),
+    d7:  retCell(allPids, 7),
+    d30: retCell(allPids, 30),
+  };
+
+  return { rows, totals };
+}
+
+function retentionColor(pct: number): string {
+  if (pct >= 30) return 'var(--green)';
+  if (pct >= 15) return 'var(--amber)';
+  return 'var(--muted)';
+}
+
+function RetentionCell({ cell }: { cell: RetentionCell }) {
+  if (cell === null) return <td style={{ color: 'rgba(122,112,136,0.4)', fontFamily: 'var(--mono)', textAlign: 'center' }}>—</td>;
+  return (
+    <td style={{ textAlign: 'center' }}>
+      <span style={{ fontFamily: 'var(--mono)', color: retentionColor(cell.pct), fontSize: '1rem' }}>
+        {cell.pct}%
+      </span>
+      <span style={{ fontFamily: 'var(--mono)', color: 'var(--muted)', fontSize: '0.75rem', display: 'block', lineHeight: 1.2 }}>
+        {cell.count} players
+      </span>
+    </td>
+  );
+}
+
+function CohortRetentionTable({ sessions }: { sessions: SessionRow[] }) {
+  if (!sessions.length) return null;
+
+  const { rows, totals } = buildCohorts(sessions);
+
+  return (
+    <div className="admin-table-wrap">
+      <table className="admin-table cohort-table">
+        <thead>
+          <tr>
+            <th>Cohort (week of)</th>
+            <th style={{ textAlign: 'center' }}>New Players</th>
+            <th style={{ textAlign: 'center' }}>D1 · next day</th>
+            <th style={{ textAlign: 'center' }}>D7 · 1 week</th>
+            <th style={{ textAlign: 'center' }}>D30 · 1 month</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.label}>
+              <td style={{ color: 'var(--text)', fontFamily: 'var(--mono)' }}>{r.label}</td>
+              <td style={{ color: 'var(--cyan)', fontFamily: 'var(--mono)', textAlign: 'center' }}>{r.players}</td>
+              <RetentionCell cell={r.d1}/>
+              <RetentionCell cell={r.d7}/>
+              <RetentionCell cell={r.d30}/>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr style={{ borderTop: '1px solid var(--border-strong)' }}>
+            <td style={{ color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: '0.78rem', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Total</td>
+            <td style={{ color: 'var(--cyan)', fontFamily: 'var(--mono)', textAlign: 'center', fontWeight: 700 }}>{totals.players}</td>
+            <RetentionCell cell={totals.d1}/>
+            <RetentionCell cell={totals.d7}/>
+            <RetentionCell cell={totals.d30}/>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 // ── data transforms ──────────────────────────────────────────────────────────
 
 function playsOverTime(sessions: SessionRow[]): Bar[] {
@@ -918,6 +1059,10 @@ export default function AdminPage() {
         <ChartCard title="Wave Progression Funnel" color="var(--green)" wide>
           <FunnelSummary sessions={filteredSessions}/>
           <FunnelChart sessions={filteredSessions}/>
+        </ChartCard>
+
+        <ChartCard title="Cohort Retention" color="var(--green)" wide>
+          <CohortRetentionTable sessions={filteredSessions}/>
         </ChartCard>
 
         <ChartCard title="Plays — Last 30 Days" color="var(--cyan)">
