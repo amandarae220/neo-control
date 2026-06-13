@@ -1130,15 +1130,17 @@ function drawPlanet(ctx: CanvasRenderingContext2D, planet: Planet) {
 }
 
 /* ── brief overlay ───────────────────────────────────────────────────── */
-const TX_PAD    = 8;
-const TX_TOP    = 56;
-const TX_LH     = 20;
-const TX_FOOTER = 44; // height reserved for footer button area
+const TX_PAD          = 8;
+const TX_TOP          = 56;
+const TX_LH           = 20;
+const TX_FOOTER       = 44;  // desktop footer height
+const TX_FOOTER_TOUCH = 150; // touch footer — CTA label + 2 stacked choice buttons
 
-function briefScrollBounds(gs: GS) {
+function briefScrollBounds(gs: GS, isTouch = false) {
+  const footer    = isTouch && gs.txHasChoice ? TX_FOOTER_TOUCH : TX_FOOTER;
   const bh        = H - TX_TOP - 36;
   const clipTop   = TX_TOP + 26;
-  const clipH     = bh - 26 - TX_FOOTER;
+  const clipH     = bh - 26 - footer;
   const ly        = TX_TOP + 40;
   const maxScroll = Math.max(0, (ly + gs.txLines.length * TX_LH) - (clipTop + clipH));
   const arrowW    = 130, arrowH = 32;
@@ -1180,7 +1182,7 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
   ctx.stroke();
 
   // scroll metrics
-  const { maxScroll, clipTop, clipH, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(gs);
+  const { maxScroll, clipTop, clipH, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(gs, isTouch);
   const scroll      = Math.min(gs.txScroll, maxScroll);
   const hasOverflow = maxScroll > 0;
   const atBottom    = scroll >= maxScroll - 1;
@@ -1635,15 +1637,30 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
   ctx.textAlign = 'right';
   ctx.fillStyle = C.muted; ctx.fillText(`WAVE ${gs.wave}`, W - edge, 18);
 
-  // mission progress in HUD
+  // mission progress
   if (gs.phase === 'play' || gs.phase === 'die') {
-    ctx.font = "13px 'VT323', monospace";
-    const pct = gs.missionKind === 'approach'
+    const pct    = gs.missionKind === 'approach'
       ? Math.round(gs.stationProgress * 100)
       : gs.totalEnemies > 0 ? Math.round((1 - gs.enemies.length / gs.totalEnemies) * 100) : 0;
-    const label = gs.missionKind === 'approach' ? 'DOCK' : 'ELIM';
-    ctx.fillStyle = C.green;
-    ctx.fillText(`${label}: ${pct}%`, W - edge, 34);
+    const mLabel = gs.missionKind === 'approach' ? 'DOCK' : 'ELIM';
+
+    if (isTouch) {
+      // visual progress bar replacing plain text on mobile
+      const BAR_W = 76, BAR_H = 7;
+      const bx    = W - edge - BAR_W;
+      const by    = 22;
+      ctx.fillStyle = 'rgba(102,242,165,0.12)';
+      ctx.fillRect(bx, by, BAR_W, BAR_H);
+      ctx.fillStyle = C.green;
+      ctx.fillRect(bx, by, Math.round(BAR_W * pct / 100), BAR_H);
+      ctx.font      = "12px 'VT323', monospace";
+      ctx.fillStyle = C.green;
+      ctx.fillText(`${mLabel} ${pct}%`, W - edge, 42);
+    } else {
+      ctx.font      = "13px 'VT323', monospace";
+      ctx.fillStyle = C.green;
+      ctx.fillText(`${mLabel}: ${pct}%`, W - edge, 34);
+    }
   }
 
   ctx.font      = "16px 'VT323', monospace";
@@ -1653,6 +1670,26 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
   const livesY = isTouch ? H - 48 : H - 14;
   for (let i = 0; i < gs.lives; i++)
     drawSpr(ctx, SPR.player, C.cyan, 14 + i * 16, livesY, 2);
+
+  // mobile score feed — last 3 events fading out over 5 seconds, right-aligned
+  if (isTouch && gs.phase === 'play' && gs.scoreLog.length > 0) {
+    const feed = gs.scoreLog.filter(e => e.age < 5).slice(0, 3);
+    feed.forEach((e, i) => {
+      const alpha = Math.max(0, 1 - e.age / 5);
+      const fy    = 58 + i * 24;
+      ctx.globalAlpha = alpha;
+      ctx.textAlign   = 'right';
+      ctx.font        = "16px 'VT323', monospace";
+      ctx.fillStyle   = C.cyan;
+      ctx.fillText(`+${e.pts.toLocaleString()}`, W - edge, fy);
+      ctx.font        = "12px 'VT323', monospace";
+      ctx.fillStyle   = C.muted;
+      ctx.fillText(e.label, W - edge, fy + 13);
+    });
+    ctx.globalAlpha = 1;
+    ctx.textAlign   = 'left';
+    ctx.font        = "16px 'VT323', monospace";
+  }
 
   // wave clear / dock complete banner
   if (gs.waveT > 0) {
@@ -1756,6 +1793,7 @@ export default function GameCanvas() {
   const cheatStatusRef   = useRef<HTMLParagraphElement>(null);
   const autoFireRef      = useRef(false);
   const autoFireBtnRef   = useRef<HTMLButtonElement>(null);
+  const joystickAreaRef  = useRef<HTMLDivElement>(null);
   const choice1BtnRef    = useRef<HTMLButtonElement>(null);
   const choice2BtnRef    = useRef<HTMLButtonElement>(null);
   const trackedLivesRef  = useRef(3);
@@ -1946,7 +1984,7 @@ export default function GameCanvas() {
       const rect = canvas.getBoundingClientRect();
       const cx = (e.clientX - rect.left) * (W / rect.width);
       const cy = (e.clientY - rect.top)  * (H / rect.height);
-      const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(g);
+      const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(g, true);
       if (maxScroll > 0 && g.txScroll < maxScroll - 1
           && cx >= arrowX && cx <= arrowX + arrowW
           && cy >= arrowY && cy <= arrowY + arrowH) {
@@ -2160,9 +2198,9 @@ export default function GameCanvas() {
         autoFireBtnRef.current?.classList.remove('is-active');
       }
 
-      // briefing choice overlay — touch only, shown only when at bottom of scrollable content
+      // briefing choice overlay — shown at bottom of canvas when text is done
       if (choiceOverlayRef.current) {
-        const { maxScroll } = briefScrollBounds(g);
+        const { maxScroll } = briefScrollBounds(g, isTouch);
         const atBottom      = maxScroll <= 0 || g.txScroll >= maxScroll - 1;
         const showChoices   = isTouch && g.phase === 'brief' && g.txDone && g.txHasChoice && atBottom;
         choiceOverlayRef.current.style.display = showChoices ? 'flex' : 'none';
@@ -2259,7 +2297,7 @@ export default function GameCanvas() {
               const gs = gsRef.current;
               if (gs.paused) return;
               if (gs.phase === 'brief') {
-                const { maxScroll } = briefScrollBounds(gs);
+                const { maxScroll } = briefScrollBounds(gs, true);
                 const atBottom = maxScroll <= 0 || gs.txScroll >= maxScroll - 1;
                 if (!atBottom) {
                   gs.txScroll = maxScroll;
@@ -2287,27 +2325,58 @@ export default function GameCanvas() {
             }}
           />
           <div ref={hudControlsRef} className="hud-controls" style={{ display: 'none' }} aria-hidden="true">
-            <div ref={joystickBaseRef} className="joystick-base">
-              <div ref={joystickKnobRef} className="joystick-knob" />
+            <div ref={joystickAreaRef} className="hud-play-area">
+              <div ref={joystickBaseRef} className="joystick-base">
+                <div ref={joystickKnobRef} className="joystick-knob" />
+              </div>
+              <div className="hud-actions">
+                <button
+                  ref={autoFireBtnRef}
+                  className="hud-btn hud-btn-auto"
+                  onTouchStart={e => {
+                    e.preventDefault();
+                    autoFireRef.current = !autoFireRef.current;
+                    autoFireBtnRef.current?.classList.toggle('is-active', autoFireRef.current);
+                    if (!autoFireRef.current) gsRef.current.keys.delete('z');
+                  }}
+                >AUTO</button>
+                <button
+                  className="hud-btn hud-btn-fire"
+                  onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
+                  onTouchEnd={() => { if (!autoFireRef.current) gsRef.current.keys.delete('z'); }}
+                  onTouchCancel={() => { if (!autoFireRef.current) gsRef.current.keys.delete('z'); }}
+                >FIRE</button>
+              </div>
             </div>
-            <div className="hud-actions">
-              <button
-                ref={autoFireBtnRef}
-                className="hud-btn hud-btn-auto"
-                onTouchStart={e => {
-                  e.preventDefault();
-                  autoFireRef.current = !autoFireRef.current;
-                  autoFireBtnRef.current?.classList.toggle('is-active', autoFireRef.current);
-                  if (!autoFireRef.current) gsRef.current.keys.delete('z');
-                }}
-              >AUTO</button>
-              <button
-                className="hud-btn hud-btn-fire"
-                onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
-                onTouchEnd={() => { if (!autoFireRef.current) gsRef.current.keys.delete('z'); }}
-                onTouchCancel={() => { if (!autoFireRef.current) gsRef.current.keys.delete('z'); }}
-              >FIRE</button>
-            </div>
+          </div>
+          <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
+            <p className="touch-choice-cta">— CHOOSE YOUR PATH —</p>
+            <button
+              ref={choice1BtnRef}
+              className="touch-btn touch-btn-choice"
+              onTouchEnd={() => {
+                const gs = gsRef.current;
+                if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
+                  const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 1 as const });
+                  ng.phase  = 'intro';
+                  ng.introT = 0;
+                  gsRef.current = ng;
+                }
+              }}
+            >[1]</button>
+            <button
+              ref={choice2BtnRef}
+              className="touch-btn touch-btn-choice"
+              onTouchEnd={() => {
+                const gs = gsRef.current;
+                if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
+                  const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 2 as const });
+                  ng.phase  = 'intro';
+                  ng.introT = 0;
+                  gsRef.current = ng;
+                }
+              }}
+            >[2]</button>
           </div>
           <LeaderboardOverlay
             overlayRef={lbOverlayRef}
@@ -2353,36 +2422,6 @@ export default function GameCanvas() {
             }}
           />
 
-          <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
-            <div className="touch-row">
-              <button
-                ref={choice1BtnRef}
-                className="touch-btn touch-btn-choice"
-                onTouchEnd={() => {
-                  const gs = gsRef.current;
-                  if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 1 as const });
-                    ng.phase  = 'intro';
-                    ng.introT = 0;
-                    gsRef.current = ng;
-                  }
-                }}
-              >[1]</button>
-              <button
-                ref={choice2BtnRef}
-                className="touch-btn touch-btn-choice"
-                onTouchEnd={() => {
-                  const gs = gsRef.current;
-                  if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 2 as const });
-                    ng.phase  = 'intro';
-                    ng.introT = 0;
-                    gsRef.current = ng;
-                  }
-                }}
-              >[2]</button>
-            </div>
-          </div>
         </div>
         <div ref={sidebarRef} className="station-sidebar">
           <div className="sidebar-title">NEO-7</div>

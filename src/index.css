@@ -756,18 +756,18 @@ button:disabled {
 }
 
 .touch-btn-choice {
-  min-width: 120px;
-  height: 48px;
+  width: 78%;
+  align-self: center;
+  height: 34px;
   padding: 0 16px;
   background: rgba(247, 199, 106, 0.07);
   border-color: rgba(247, 199, 106, 0.35);
   color: var(--amber);
-  font-size: 0.95rem;
+  font-size: 1rem;
   letter-spacing: 0.08em;
   text-shadow: 0 0 8px rgba(247, 199, 106, 0.4);
   border-radius: 3px;
   text-align: center;
-  white-space: nowrap;
 }
 
 .touch-btn-choice:active {
@@ -1102,16 +1102,31 @@ button:disabled {
 }
 .lb-retry-btn:hover { opacity: 1; color: var(--amber); animation: none; }
 
+.hud-play-area {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
 .touch-choice-overlay {
   display: none;
   position: absolute;
-  bottom: 8%;
-  left: 50%;
-  transform: translateX(-50%);
-  flex-direction: row;
-  align-items: center;
-  gap: 16px;
+  bottom: 7.86%;
+  left: 3.8%;
+  right: 3.8%;
+  flex-direction: column;
+  gap: 8px;
   z-index: 10;
+}
+
+.touch-choice-cta {
+  margin: 0;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: var(--muted);
 }
 
 @media (pointer: coarse) {
