@@ -1109,7 +1109,7 @@ export default function AdminPage() {
                   <td>{s.created_at?.slice(0, 10)}</td>
                   <td className="admin-td-score">{s.score.toLocaleString()}</td>
                   <td className="admin-td-wave">{s.wave}</td>
-                  <td className="admin-td-dur">{s.duration_seconds}s</td>
+                  <td className="admin-td-dur">{fmtDur(s.duration_seconds)}</td>
                   <td>{s.replay_number}</td>
                   <td>{s.device}</td>
                   <td>{s.browser}</td>
