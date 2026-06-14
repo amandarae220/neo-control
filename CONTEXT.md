@@ -45,7 +45,7 @@ Live URL: Deployed on Vercel (see `.vercel/project.json` for project/org IDs).
 ### Game Loop (`src/game/GameCanvas.tsx`)
 - Canvas draws at **420×560** logical pixels, CSS-scaled to fill `canvas-wrap`.
 - All mutable game state lives in `gsRef.current` (type `GS`). Never stored in React state.
-- `newGame(wave, score, hi, lives, profile, buckshotUsed, pathChoices)` creates fresh GS.
+- `newGame(wave, score, hi, lives, profile, buckshotUsed, pathChoices, activePowerup)` creates fresh GS.
 - RAF tick drives physics, drawing, and DOM ref updates (score, wave, lives counters).
 - `isTouch` is derived from `window.matchMedia('(pointer: coarse)')` once on mount.
 
@@ -65,8 +65,9 @@ room for the DOM choice overlay buttons.
 ### Touch Controls (DOM overlays inside `canvas-wrap`)
 - **Joystick** — `joystickBaseRef` / `joystickKnobRef`, touch drag, `MAX_TRAVEL = 38`
 - **Fire / Auto** — `autoFireRef` (boolean), `autoFireBtnRef` toggled with `.is-active`
-- **Choice overlay** — `choiceOverlayRef` (`position: absolute; bottom: 7.86%`) shown only
-  when `phase === 'brief' && txDone && txHasChoice && atBottom`
+- **Choice overlay** — `choiceOverlayRef` (`position: absolute; bottom: 7.86%`) shown during
+  `phase === 'brief' && txDone && txHasChoice && atBottom` (path choice) **or**
+  `phase === 'powerup' && powerupOffer !== null` (powerup pick); `ctaLabelRef` updates the label
 - **Haptics** — `navigator.vibrate?.()` called on life loss (55ms) and game over (80,30,80ms)
 
 ### Admin Dashboard (`src/pages/AdminPage.tsx`)
@@ -220,3 +221,34 @@ Recent sessions table `duration_seconds` column now uses `fmtDur()` (e.g. `1m 30
 ### `28125d1` — admin page scroll fix
 `overflow-x: hidden` → `overflow-x: clip` on both `html` and `body` so the viewport
 remains the scroll root and mouse-wheel scrolling works on the admin page.
+
+### `0870f3f` — admin ET timestamps + CONTEXT.md + GAME_TEXT.txt
+- Added Time (ET) column to Recent Sessions table (right of Date), formatted with `Intl` in `America/New_York`
+- Date column confirmed as ET as well; both use `toLocaleString` with `timeZone` option
+- Created `CONTEXT.md` (this file) as persistent project context surviving chat resets
+- Created `GAME_TEXT.txt` at repo root — plain-text export of all in-game copy (transmissions, HUD labels, leaderboard strings) for external editing
+
+### `90b224a` — wave 3 difficulty reduction + no bottom-spawning hazards
+- Aggressive movement patterns (`chase`, `swoop`) delayed from wave 3 → wave 4 to smooth the wave-3 difficulty cliff that was causing ~44% player dropout
+- Gravity rocks and enemies can no longer spawn from the bottom edge — `mkRock` now uses 3 edges (top/left/right) instead of 4, eliminating surprise hits from below
+- Mobile choice buttons: added "— CHOOSE YOUR PATH —" CTA label above touch choice overlay; tuned button height (`34px`) and width (`78%`) to fit cleanly inside the modal bounds at `TX_FOOTER_TOUCH = 150`
+
+### `98f24cf` — pause/settings buttons resized and repositioned
+- Pause and settings buttons moved to consistent position on desktop and mobile: `top: 6px` (right and left respectively)
+- Both buttons enlarged to `46×46px`, `font-size: 1.2rem`, with a subtle border for visibility
+- Canvas HUD score/wave text `edge` offset increased to `110px` (desktop) / `80px` (touch) so HUD text clears the larger buttons
+- Settings panel `top` adjusted from `94px` → `48px` to track the moved button
+
+### `c6ced6f` — wave-completion powerup system
+Full pick-one-of-two powerup system added after every wave clear:
+- **5 powerup types**: shield (absorb one hit), rapid fire (2× fire rate), spread shot (3-way fire, no bullet cap), score surge (1.5× kill points), extra life (+1 life, capped at 5)
+- **Fixed pairings per wave**: wave 1 → [shield/rapid], wave 2 → [spread/surge], wave 3 → [life/shield], wave 4 → [rapid/spread], wave 5 → [surge/life], wave 6+ → [shield/spread]
+- **New `'powerup'` phase** in the game state machine — appears after the wave-clear banner, before the jump/brief sequence
+- Canvas draws a "── POWER UP ──" modal with two labeled options; desktop uses `1`/`2` keys, touch uses the existing DOM choice overlay (buttons repopulated with powerup names via `ctaLabelRef`)
+- Effects applied immediately to the next wave via `newGame(…, activePowerup)` — expire after that wave (extra life is permanent)
+- `killPlayer` checks `activePowerup === 'shield'` first and consumes it; `pickPowerup` helper handles the transition to jump/brief after selection
+- HUD shows `★ [POWERUP NAME]` badge in top-left while a powerup is active
+- `startBrief` helper extracted to deduplicate brief-setup code shared between the wave-clear and jump paths
+
+### `4f1b97a` — Vercel build fix (TypeScript strict compliance)
+- Fixed TS2322/TS2677 errors in `AdminPage.tsx`: annotated the `Array.from` mapper callback in `PlayerProgressionCard` as `(_, i): LinePt | null => …` so the inferred array type is `(LinePt | null)[]` rather than `({ count: number } | null)[]`, making the `d is LinePt` predicate valid under strict mode
