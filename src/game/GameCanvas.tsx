@@ -1929,7 +1929,9 @@ export default function GameCanvas() {
   const choice1BtnRef    = useRef<HTMLButtonElement>(null);
   const choice2BtnRef    = useRef<HTMLButtonElement>(null);
   const ctaLabelRef      = useRef<HTMLParagraphElement>(null);
-  const trackedLivesRef  = useRef(3);
+  const trackedLivesRef    = useRef(3);
+  const pauseUsedRef       = useRef(false);
+  const powerupChoicesRef  = useRef<Record<number, PowerupKind>>({});
 
   useEffect(() => {
     const canvas  = canvasRef.current!;
@@ -1954,8 +1956,10 @@ export default function GameCanvas() {
       if ((e.key === ' ' || e.key === 'Enter') && gsRef.current.phase === 'over')
         gsRef.current = newGame(1, 0, gsRef.current.hi, 3);
 
-      if (e.key === 'p' && gsRef.current.phase === 'play')
+      if (e.key === 'p' && gsRef.current.phase === 'play') {
         gsRef.current.paused = !gsRef.current.paused;
+        if (gsRef.current.paused) pauseUsedRef.current = true;
+      }
 
       if ((e.key === ' ' || e.key === 'Enter') && gsRef.current.phase === 'brief') {
         const gs = gsRef.current;
@@ -1992,7 +1996,9 @@ export default function GameCanvas() {
       if ((e.key === '1' || e.key === '2') && gsRef.current.phase === 'powerup') {
         const gs = gsRef.current;
         if (gs.powerupOffer) {
-          pickPowerup(gs, e.key === '1' ? gs.powerupOffer[0] : gs.powerupOffer[1]);
+          const kind = e.key === '1' ? gs.powerupOffer[0] : gs.powerupOffer[1];
+          powerupChoicesRef.current[gs.wave] = kind;
+          pickPowerup(gs, kind);
         }
       }
 
@@ -2080,9 +2086,11 @@ export default function GameCanvas() {
 
     const handleRetry = () => {
       gsRef.current = newGame(1, 0, gsRef.current.hi, 3);
-      trackedPhaseRef.current  = 'brief';
-      trackedWaveRef.current   = 0;
-      trackedAscentRef.current = false;
+      trackedPhaseRef.current    = 'brief';
+      trackedWaveRef.current     = 0;
+      trackedAscentRef.current   = false;
+      pauseUsedRef.current       = false;
+      powerupChoicesRef.current  = {};
     };
 
     const handleRandomize = () => {
@@ -2168,7 +2176,10 @@ export default function GameCanvas() {
     const handlePauseDown = (e: Event) => {
       e.preventDefault();
       e.stopPropagation();
-      if (gsRef.current.phase === 'play') gsRef.current.paused = !gsRef.current.paused;
+      if (gsRef.current.phase === 'play') {
+        gsRef.current.paused = !gsRef.current.paused;
+        if (gsRef.current.paused) pauseUsedRef.current = true;
+      }
     };
     pauseEl.addEventListener('pointerdown', handlePauseDown);
 
@@ -2252,7 +2263,15 @@ export default function GameCanvas() {
           path_choices:     Object.fromEntries(
             Object.entries(g.pathChoices).map(([w, c]) => [`wave_${w}_path`, c])
           ) as Record<string, 1 | 2>,
+          pause_used:       pauseUsedRef.current,
+          powerup_choices:  Object.fromEntries(
+            Object.entries(powerupChoicesRef.current).map(([w, k]) => [w, k])
+          ),
         });
+      }
+      if (prevPhase === 'over' && g.phase !== 'over') {
+        pauseUsedRef.current      = false;
+        powerupChoicesRef.current = {};
       }
       trackedPhaseRef.current = g.phase;
 
@@ -2504,7 +2523,9 @@ export default function GameCanvas() {
               onTouchEnd={() => {
                 const gs = gsRef.current;
                 if (gs.phase === 'powerup' && gs.powerupOffer) {
-                  pickPowerup(gs, gs.powerupOffer[0]);
+                  const kind = gs.powerupOffer[0];
+                  powerupChoicesRef.current[gs.wave] = kind;
+                  pickPowerup(gs, kind);
                 } else if (gs.phase === 'brief' && gs.txHasChoice && gs.txDone && gs.txProfiles) {
                   const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 1 as const }, gs.activePowerup);
                   ng.phase  = 'intro';
@@ -2519,7 +2540,9 @@ export default function GameCanvas() {
               onTouchEnd={() => {
                 const gs = gsRef.current;
                 if (gs.phase === 'powerup' && gs.powerupOffer) {
-                  pickPowerup(gs, gs.powerupOffer[1]);
+                  const kind = gs.powerupOffer[1];
+                  powerupChoicesRef.current[gs.wave] = kind;
+                  pickPowerup(gs, kind);
                 } else if (gs.phase === 'brief' && gs.txHasChoice && gs.txDone && gs.txProfiles) {
                   const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 2 as const }, gs.activePowerup);
                   ng.phase  = 'intro';

@@ -1,16 +1,18 @@
 import { supabase } from './supabase';
 
 export type SessionRow = {
-  id?:              string;
-  player_id:        string;
-  score:            number;
-  wave:             number;
-  device:           'touch' | 'keyboard';
-  browser:          string;
-  replay_number:    number;
-  duration_seconds: number;
-  path_choices?:    Record<string, 1 | 2>;
-  created_at?:      string;
+  id?:               string;
+  player_id:         string;
+  score:             number;
+  wave:              number;
+  device:            'touch' | 'keyboard';
+  browser:           string;
+  replay_number:     number;
+  duration_seconds:  number;
+  path_choices?:     Record<string, 1 | 2>;
+  pause_used?:       boolean;
+  powerup_choices?:  Record<string, string>;
+  created_at?:       string;
 };
 
 export async function submitSession(

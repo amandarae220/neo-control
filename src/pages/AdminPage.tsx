@@ -1101,6 +1101,7 @@ export default function AdminPage() {
                 <th>Replay #</th>
                 <th>Device</th>
                 <th>Browser</th>
+                <th title="Did the player use the pause button?">Pause</th>
                 <th>Player ID</th>
               </tr>
             </thead>
@@ -1115,6 +1116,7 @@ export default function AdminPage() {
                   <td>{s.replay_number}</td>
                   <td>{s.device}</td>
                   <td>{s.browser}</td>
+                  <td style={{ textAlign: 'center', color: s.pause_used ? 'var(--green)' : 'var(--muted)' }}>{s.pause_used ? '✓' : '—'}</td>
                   <td className="admin-player-id">{s.player_id.slice(0, 8)}…</td>
                 </tr>
               ))}
