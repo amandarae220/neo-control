@@ -364,7 +364,7 @@ function PlayerProgressionCard({ sessions }: { sessions: SessionRow[] }) {
 
   const maxReplay = Math.min(Math.max(...Object.keys(byReplay).map(Number), 1), 20);
 
-  const data: LinePt[] = Array.from({ length: maxReplay }, (_, i) => {
+  const data: LinePt[] = Array.from({ length: maxReplay }, (_, i): LinePt | null => {
     const r     = i + 1;
     const group = byReplay[r] ?? [];
     if (!group.length) return null;
