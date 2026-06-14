@@ -1094,6 +1094,7 @@ export default function AdminPage() {
             <thead>
               <tr>
                 <th>Date</th>
+                <th>Time (ET)</th>
                 <th>Score</th>
                 <th>Wave</th>
                 <th>Duration</th>
@@ -1106,7 +1107,8 @@ export default function AdminPage() {
             <tbody>
               {filteredSessions.slice(0, 50).map(s => (
                 <tr key={s.id}>
-                  <td>{s.created_at?.slice(0, 10)}</td>
+                  <td>{s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', { timeZone: 'America/New_York', month: '2-digit', day: '2-digit', year: '2-digit' }) : '—'}</td>
+                  <td className="admin-td-time">{s.created_at ? new Date(s.created_at).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', hour12: true }) : '—'}</td>
                   <td className="admin-td-score">{s.score.toLocaleString()}</td>
                   <td className="admin-td-wave">{s.wave}</td>
                   <td className="admin-td-dur">{fmtDur(s.duration_seconds)}</td>
