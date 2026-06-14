@@ -413,8 +413,8 @@ function buildWave(wave: number, profile: PhysicsProfile = DEFAULT_PROFILE): Ene
   const count = Math.min(6 + wave * 3, 24);
   const arr: Enemy[] = [];
   const allMoves: EMove[] = ['drift', 'drift', 'sweep', 'swoop', 'chase'];
-  if (wave >= 3) allMoves.push('chase', 'swoop');
-  if (wave >= 5) allMoves.push('chase', 'chase');
+  if (wave >= 4) allMoves.push('chase', 'swoop');
+  if (wave >= 6) allMoves.push('chase', 'chase');
 
   for (let i = 0; i < count; i++) {
     const rng  = Math.random();
@@ -460,12 +460,11 @@ function mkStars(): GS['stars'] {
 }
 
 function mkRock(id: number, profile: PhysicsProfile = DEFAULT_PROFILE): GravRock {
-  const edge = Math.floor(Math.random() * 4);
+  const edge = Math.floor(Math.random() * 3);
   let x = 0, y = 0, tx = 0, ty = 0;
   switch (edge) {
     case 0: x = Math.random() * W; y = -18;    tx = Math.random() * W; ty = H + 18;  break;
     case 1: x = W + 18; y = Math.random() * H; tx = -18;               ty = Math.random() * H; break;
-    case 2: x = Math.random() * W; y = H + 18; tx = Math.random() * W; ty = -18;     break;
     default: x = -18; y = Math.random() * H;   tx = W + 18;            ty = Math.random() * H;
   }
   const dx = tx - x, dy = ty - y, d = Math.sqrt(dx * dx + dy * dy) || 1;
