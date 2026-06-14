@@ -233,7 +233,9 @@ const TRANSMISSIONS: WaveBrief[] = [
 ];
 
 /* ── types ───────────────────────────────────────────────────────────── */
-type Phase  = 'play' | 'die' | 'over' | 'brief' | 'intro' | 'jump';
+type PowerupKind   = 'shield' | 'rapid' | 'spread' | 'surge' | 'life';
+type ActivePowerup = 'shield' | 'rapid' | 'spread' | 'surge';
+type Phase  = 'play' | 'die' | 'over' | 'brief' | 'intro' | 'jump' | 'powerup';
 type EK     = 0 | 1 | 2;          // 0 = rock · 1 = alien · 2 = boss
 type EMove  = 'drift' | 'sweep' | 'swoop' | 'chase';
 
@@ -315,6 +317,8 @@ interface GS {
   gtaDroneShootT:      number;
   stickX:              number;
   buckshot:        boolean;
+  buckshotUsed:    boolean;
+  pathChoices:     Partial<Record<number, 1 | 2>>;
   missionKind:     'approach' | 'eliminate';
   stationProgress: number;
   dockSeq:         boolean;
@@ -323,6 +327,8 @@ interface GS {
   totalEnemies:    number;
   scoreLog:        ScoreEvent[];
   activeProfile:   PhysicsProfile;
+  powerupOffer:    [PowerupKind, PowerupKind] | null;
+  activePowerup:   ActivePowerup | null;
 }
 
 interface ScoreEvent {
@@ -330,6 +336,23 @@ interface ScoreEvent {
   pts:   number;
   age:   number;
 }
+
+const POWERUP_OFFERS: [PowerupKind, PowerupKind][] = [
+  ['shield', 'rapid'],   // wave 1 → 2
+  ['spread', 'surge'],   // wave 2 → 3
+  ['life',   'shield'],  // wave 3 → 4
+  ['rapid',  'spread'],  // wave 4 → 5
+  ['surge',  'life'],    // wave 5 → 6
+  ['shield', 'spread'],  // wave 6+
+];
+
+const POWERUP_INFO: Record<PowerupKind, { label: string; desc: string; color: string }> = {
+  shield: { label: 'SHIELD',      desc: 'ABSORB ONE HIT',          color: C.cyan  },
+  rapid:  { label: 'RAPID FIRE',  desc: '2× FIRE RATE THIS WAVE',  color: C.green },
+  spread: { label: 'SPREAD SHOT', desc: '3-WAY FIRE THIS WAVE',    color: C.green },
+  surge:  { label: 'SCORE SURGE', desc: '1.5× POINTS THIS WAVE',   color: C.amber },
+  life:   { label: 'EXTRA LIFE',  desc: '+1 LIFE  (MAX 5)',         color: C.pink  },
+};
 
 /* ── pixel-art sprites ───────────────────────────────────────────────── */
 const SPR = {
@@ -411,8 +434,8 @@ function buildWave(wave: number, profile: PhysicsProfile = DEFAULT_PROFILE): Ene
   const count = Math.min(6 + wave * 3, 24);
   const arr: Enemy[] = [];
   const allMoves: EMove[] = ['drift', 'drift', 'sweep', 'swoop', 'chase'];
-  if (wave >= 3) allMoves.push('chase', 'swoop');
-  if (wave >= 5) allMoves.push('chase', 'chase');
+  if (wave >= 4) allMoves.push('chase', 'swoop');
+  if (wave >= 6) allMoves.push('chase', 'chase');
 
   for (let i = 0; i < count; i++) {
     const rng  = Math.random();
@@ -458,12 +481,11 @@ function mkStars(): GS['stars'] {
 }
 
 function mkRock(id: number, profile: PhysicsProfile = DEFAULT_PROFILE): GravRock {
-  const edge = Math.floor(Math.random() * 4);
+  const edge = Math.floor(Math.random() * 3);
   let x = 0, y = 0, tx = 0, ty = 0;
   switch (edge) {
     case 0: x = Math.random() * W; y = -18;    tx = Math.random() * W; ty = H + 18;  break;
     case 1: x = W + 18; y = Math.random() * H; tx = -18;               ty = Math.random() * H; break;
-    case 2: x = Math.random() * W; y = H + 18; tx = Math.random() * W; ty = -18;     break;
     default: x = -18; y = Math.random() * H;   tx = W + 18;            ty = Math.random() * H;
   }
   const dx = tx - x, dy = ty - y, d = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -476,11 +498,14 @@ function mkRock(id: number, profile: PhysicsProfile = DEFAULT_PROFILE): GravRock
 }
 
 function newGame(
-  wave    = 1,
-  score   = 0,
-  hi      = 0,
-  lives   = 3,
+  wave         = 1,
+  score        = 0,
+  hi           = 0,
+  lives        = 3,
   profile: PhysicsProfile = DEFAULT_PROFILE,
+  buckshotUsed = false,
+  pathChoices: Partial<Record<number, 1 | 2>> = {},
+  activePowerup: ActivePowerup | null = null,
 ): GS {
   const enemies = buildWave(wave, profile);
   return {
@@ -506,12 +531,44 @@ function newGame(
     scoreLog:        [],
     activeProfile:   profile,
     buckshot:        false,
+    buckshotUsed,
+    pathChoices,
+    powerupOffer:    null,
+    activePowerup,
   };
 }
 
 function logScore(gs: GS, label: string, pts: number) {
   gs.scoreLog.unshift({ label, pts, age: 0 });
   if (gs.scoreLog.length > 8) gs.scoreLog.length = 8;
+}
+
+function startBrief(gs: GS) {
+  gs.phase = 'brief';
+  const idx   = Math.min(gs.wave - 1, TRANSMISSIONS.length - 1);
+  const brief = TRANSMISSIONS[idx];
+  gs.txLines      = brief.lines;
+  gs.txHasChoice  = !!brief.profiles;
+  gs.txProfiles   = brief.profiles ?? null;
+  gs.txChoiceTimer = 0;
+  gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0; gs.txScroll = 0;
+}
+
+function pickPowerup(gs: GS, kind: PowerupKind) {
+  if (kind === 'life') {
+    gs.lives      = Math.min(5, gs.lives + 1);
+    gs.activePowerup = null;
+  } else {
+    gs.activePowerup = kind;
+  }
+  gs.powerupOffer = null;
+  if (gs.missionKind === 'eliminate') {
+    gs.phase = 'jump';
+    gs.jumpT  = 0;
+    gs.px     = W / 2;
+  } else {
+    startBrief(gs);
+  }
 }
 
 function introGame(): GS {
@@ -742,6 +799,12 @@ function tickSparks(gs: GS, dt: number) {
 }
 
 function killPlayer(gs: GS) {
+  if (gs.activePowerup === 'shield') {
+    gs.activePowerup = null;
+    gs.invT = 2.5;
+    burst(gs, gs.px, PY, C.amber, 8);
+    return;
+  }
   burst(gs, gs.px, PY, C.cyan, 12);
   gs.bullets = gs.bullets.filter(b => b.player);
   gs.lives--;
@@ -779,20 +842,9 @@ function update(gs: GS, dt: number) {
   if (gs.waveT > 0) {
     gs.waveT -= dt;
     if (gs.waveT <= 0) {
-      if (gs.missionKind === 'eliminate') {
-        gs.phase = 'jump';
-        gs.jumpT = 0;
-        gs.px    = W / 2;
-      } else {
-        gs.phase = 'brief';
-        const idx   = Math.min(gs.wave - 1, TRANSMISSIONS.length - 1);
-        const brief = TRANSMISSIONS[idx];
-        gs.txLines      = brief.lines;
-        gs.txHasChoice  = !!brief.profiles;
-        gs.txProfiles   = brief.profiles ?? null;
-        gs.txChoiceTimer = 0;
-        gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0; gs.txScroll = 0;
-      }
+      const offerIdx  = Math.min(gs.wave - 1, POWERUP_OFFERS.length - 1);
+      gs.powerupOffer = POWERUP_OFFERS[offerIdx];
+      gs.phase        = 'powerup';
     }
     tickStars(gs, dt); tickSparks(gs, dt); tickPlanets(gs, dt);
     return;
@@ -808,14 +860,7 @@ function update(gs: GS, dt: number) {
     });
     tickSparks(gs, dt);
     if (gs.jumpT >= 2.0) {
-      gs.phase = 'brief';
-      const idx   = Math.min(gs.wave - 1, TRANSMISSIONS.length - 1);
-      const brief = TRANSMISSIONS[idx];
-      gs.txLines      = brief.lines;
-      gs.txHasChoice  = !!brief.profiles;
-      gs.txProfiles   = brief.profiles ?? null;
-      gs.txChoiceTimer = 0;
-      gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0; gs.txScroll = 0;
+      startBrief(gs);
     }
     return;
   }
@@ -836,6 +881,12 @@ function update(gs: GS, dt: number) {
     }
     // player must actively continue — no auto-advance
     tickStars(gs, dt); tickPlanets(gs, dt);
+    return;
+  }
+
+  /* ── powerup selection screen ── */
+  if (gs.phase === 'powerup') {
+    tickStars(gs, dt); tickSparks(gs, dt);
     return;
   }
 
@@ -888,19 +939,19 @@ function update(gs: GS, dt: number) {
 
   /* ── player shoot ── */
   gs.shootT = Math.max(0, gs.shootT - dt);
-  const canShoot = gs.keys.has(' ') || gs.keys.has('z');
-  const underCap = gs.buckshot || gs.bullets.filter(b => b.player).length < MAX_BULLETS;
+  const canShoot  = gs.keys.has(' ') || gs.keys.has('z');
+  const useSpread = gs.buckshot || gs.activePowerup === 'spread';
+  const underCap  = useSpread || gs.bullets.filter(b => b.player).length < MAX_BULLETS;
   if (canShoot && gs.shootT <= 0 && underCap) {
-    if (gs.buckshot) {
-      // three-way spread: left, center, right
+    if (useSpread) {
       const spread = 55;
-      gs.bullets.push({ id: gs.seq++, x: gs.px,          y: PY - 12, vx: 0,       vy: B_SPD,       player: true });
-      gs.bullets.push({ id: gs.seq++, x: gs.px,          y: PY - 12, vx: -spread, vy: B_SPD * 0.97, player: true });
-      gs.bullets.push({ id: gs.seq++, x: gs.px,          y: PY - 12, vx:  spread, vy: B_SPD * 0.97, player: true });
+      gs.bullets.push({ id: gs.seq++, x: gs.px, y: PY - 12, vx: 0,       vy: B_SPD,        player: true });
+      gs.bullets.push({ id: gs.seq++, x: gs.px, y: PY - 12, vx: -spread, vy: B_SPD * 0.97, player: true });
+      gs.bullets.push({ id: gs.seq++, x: gs.px, y: PY - 12, vx:  spread, vy: B_SPD * 0.97, player: true });
     } else {
       gs.bullets.push({ id: gs.seq++, x: gs.px, y: PY - 12, vx: 0, vy: B_SPD, player: true });
     }
-    gs.shootT = 0.18;
+    gs.shootT = gs.activePowerup === 'rapid' ? 0.09 : 0.18;
   }
 
   /* ── move bullets ── */
@@ -919,7 +970,8 @@ function update(gs: GS, dt: number) {
       const sp = eSpr(e.kind);
       if (hit(b.x, b.y, PX, PX * 3, e.x, e.y, sprW(sp), sprH(sp))) {
         burst(gs, e.x, e.y, eColor(e.kind, e.row));
-        const awarded = Math.round((e.y > H * 0.55 ? e.dpts : e.pts) * gs.activeProfile.bonusMult);
+        const surgeMult = gs.activePowerup === 'surge' ? 1.5 : 1;
+        const awarded = Math.round((e.y > H * 0.55 ? e.dpts : e.pts) * gs.activeProfile.bonusMult * surgeMult);
         gs.score += awarded;
         gs.hi = Math.max(gs.hi, gs.score);
         logScore(gs, e.kind === 2 ? 'BOSS' : e.kind === 1 ? 'FIGHTER' : 'DRONE', awarded);
@@ -1124,15 +1176,17 @@ function drawPlanet(ctx: CanvasRenderingContext2D, planet: Planet) {
 }
 
 /* ── brief overlay ───────────────────────────────────────────────────── */
-const TX_PAD    = 8;
-const TX_TOP    = 56;
-const TX_LH     = 20;
-const TX_FOOTER = 44; // height reserved for footer button area
+const TX_PAD          = 8;
+const TX_TOP          = 56;
+const TX_LH           = 20;
+const TX_FOOTER       = 44;  // desktop footer height
+const TX_FOOTER_TOUCH = 150; // touch footer — CTA label + 2 stacked choice buttons
 
-function briefScrollBounds(gs: GS) {
+function briefScrollBounds(gs: GS, isTouch = false) {
+  const footer    = isTouch && gs.txHasChoice ? TX_FOOTER_TOUCH : TX_FOOTER;
   const bh        = H - TX_TOP - 36;
   const clipTop   = TX_TOP + 26;
-  const clipH     = bh - 26 - TX_FOOTER;
+  const clipH     = bh - 26 - footer;
   const ly        = TX_TOP + 40;
   const maxScroll = Math.max(0, (ly + gs.txLines.length * TX_LH) - (clipTop + clipH));
   const arrowW    = 130, arrowH = 32;
@@ -1174,7 +1228,7 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
   ctx.stroke();
 
   // scroll metrics
-  const { maxScroll, clipTop, clipH, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(gs);
+  const { maxScroll, clipTop, clipH, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(gs, isTouch);
   const scroll      = Math.min(gs.txScroll, maxScroll);
   const hasOverflow = maxScroll > 0;
   const atBottom    = scroll >= maxScroll - 1;
@@ -1294,6 +1348,80 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
     ctx.fillText(isTouch ? 'TAP TO SKIP' : 'SPACE TO SKIP', W / 2, by + 17);
   }
   ctx.textAlign = 'left';
+}
+
+/* ── powerup overlay ─────────────────────────────────────────────────── */
+function drawPowerup(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
+  const bw = W - TX_PAD * 2;
+  const bh = H - TX_TOP - 36;
+
+  ctx.fillStyle = 'rgba(7,6,14,0.93)';
+  ctx.fillRect(TX_PAD, TX_TOP, bw, bh);
+  ctx.strokeStyle = C.cyan;
+  ctx.lineWidth   = 1;
+  ctx.strokeRect(TX_PAD, TX_TOP, bw, bh);
+
+  ctx.font      = "15px 'VT323', monospace";
+  ctx.textAlign = 'center';
+  ctx.fillStyle = C.cyan;
+  ctx.fillText('── POWER UP ──', W / 2, TX_TOP + 16);
+  ctx.strokeStyle = 'rgba(0,229,255,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(TX_PAD + 6, TX_TOP + 22);
+  ctx.lineTo(TX_PAD + bw - 6, TX_TOP + 22);
+  ctx.stroke();
+
+  ctx.font      = "15px 'VT323', monospace";
+  ctx.fillStyle = C.muted;
+  ctx.fillText('CHOOSE YOUR ADVANTAGE', W / 2, TX_TOP + 44);
+  ctx.font      = "13px 'VT323', monospace";
+  ctx.fillStyle = 'rgba(122,112,136,0.5)';
+  ctx.fillText('ACTIVE DURING NEXT WAVE', W / 2, TX_TOP + 62);
+
+  if (!gs.powerupOffer) { ctx.textAlign = 'left'; return; }
+  const [k1, k2] = gs.powerupOffer;
+
+  const drawOpt = (kind: PowerupKind, num: 1 | 2, oy: number) => {
+    const info   = POWERUP_INFO[kind];
+    const maxed  = kind === 'life' && gs.lives >= 5;
+    const col    = maxed ? C.muted : info.color;
+    const desc   = maxed ? 'ALREADY AT MAX' : info.desc;
+    const lx     = TX_PAD + 14;
+
+    ctx.textAlign = 'left';
+    ctx.font      = "17px 'VT323', monospace";
+    ctx.fillStyle = col;
+    ctx.fillText(`[${num}]  ${info.label}`, lx, oy);
+    ctx.font      = "13px 'VT323', monospace";
+    ctx.fillStyle = maxed ? 'rgba(122,112,136,0.35)' : C.muted;
+    ctx.fillText(`       ${desc}`, lx, oy + 18);
+
+    if (!isTouch) {
+      ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 4);
+      ctx.fillStyle   = col;
+      ctx.textAlign   = 'right';
+      ctx.font        = "20px 'VT323', monospace";
+      ctx.fillText(`[ ${num} ]`, TX_PAD + bw - 10, oy + 2);
+      ctx.globalAlpha = 1;
+    }
+    ctx.textAlign = 'left';
+  };
+
+  drawOpt(k1, 1, TX_TOP + 96);
+  drawOpt(k2, 2, TX_TOP + 148);
+
+  const footerTop = TX_TOP + bh - TX_FOOTER;
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(TX_PAD + 1, footerTop, bw - 2, TX_FOOTER);
+
+  if (!isTouch) {
+    ctx.font      = "15px 'VT323', monospace";
+    ctx.textAlign = 'center';
+    ctx.fillStyle = C.muted;
+    ctx.fillText('PRESS 1 OR 2 TO SELECT', W / 2, footerTop + 28);
+    ctx.textAlign = 'left';
+  }
 }
 
 /* ── GTA drone constants & position helper ───────────────────────────── */
@@ -1436,7 +1564,8 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
 
   gs.planets.forEach(planet => drawPlanet(ctx, planet));
 
-  if (gs.phase === 'brief') { drawBrief(ctx, gs, t, isTouch); return; }
+  if (gs.phase === 'brief')   { drawBrief(ctx, gs, t, isTouch);   return; }
+  if (gs.phase === 'powerup') { drawPowerup(ctx, gs, t, isTouch); return; }
 
   drawGTADrone(ctx, gs, t);
 
@@ -1615,7 +1744,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
 }
 
 function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
-  const edge = isTouch ? 80 : 8;
+  const edge = isTouch ? 80 : 110;
   ctx.font      = "16px 'VT323', monospace";
   ctx.textAlign = 'left';
 
@@ -1629,15 +1758,30 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
   ctx.textAlign = 'right';
   ctx.fillStyle = C.muted; ctx.fillText(`WAVE ${gs.wave}`, W - edge, 18);
 
-  // mission progress in HUD
+  // mission progress
   if (gs.phase === 'play' || gs.phase === 'die') {
-    ctx.font = "13px 'VT323', monospace";
-    const pct = gs.missionKind === 'approach'
+    const pct    = gs.missionKind === 'approach'
       ? Math.round(gs.stationProgress * 100)
       : gs.totalEnemies > 0 ? Math.round((1 - gs.enemies.length / gs.totalEnemies) * 100) : 0;
-    const label = gs.missionKind === 'approach' ? 'DOCK' : 'ELIM';
-    ctx.fillStyle = C.green;
-    ctx.fillText(`${label}: ${pct}%`, W - edge, 34);
+    const mLabel = gs.missionKind === 'approach' ? 'DOCK' : 'ELIM';
+
+    if (isTouch) {
+      // visual progress bar replacing plain text on mobile
+      const BAR_W = 76, BAR_H = 7;
+      const bx    = W - edge - BAR_W;
+      const by    = 22;
+      ctx.fillStyle = 'rgba(102,242,165,0.12)';
+      ctx.fillRect(bx, by, BAR_W, BAR_H);
+      ctx.fillStyle = C.green;
+      ctx.fillRect(bx, by, Math.round(BAR_W * pct / 100), BAR_H);
+      ctx.font      = "12px 'VT323', monospace";
+      ctx.fillStyle = C.green;
+      ctx.fillText(`${mLabel} ${pct}%`, W - edge, 42);
+    } else {
+      ctx.font      = "13px 'VT323', monospace";
+      ctx.fillStyle = C.green;
+      ctx.fillText(`${mLabel}: ${pct}%`, W - edge, 34);
+    }
   }
 
   ctx.font      = "16px 'VT323', monospace";
@@ -1647,6 +1791,37 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
   const livesY = isTouch ? H - 48 : H - 14;
   for (let i = 0; i < gs.lives; i++)
     drawSpr(ctx, SPR.player, C.cyan, 14 + i * 16, livesY, 2);
+
+  // active powerup badge
+  if (gs.activePowerup) {
+    const info = POWERUP_INFO[gs.activePowerup];
+    ctx.font        = "13px 'VT323', monospace";
+    ctx.textAlign   = 'left';
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle   = info.color;
+    ctx.fillText(`★ ${info.label}`, edge, 50);
+    ctx.globalAlpha = 1;
+  }
+
+  // mobile score feed — last 3 events fading out over 5 seconds, right-aligned
+  if (isTouch && gs.phase === 'play' && gs.scoreLog.length > 0) {
+    const feed = gs.scoreLog.filter(e => e.age < 5).slice(0, 3);
+    feed.forEach((e, i) => {
+      const alpha = Math.max(0, 1 - e.age / 5);
+      const fy    = 58 + i * 24;
+      ctx.globalAlpha = alpha;
+      ctx.textAlign   = 'right';
+      ctx.font        = "16px 'VT323', monospace";
+      ctx.fillStyle   = C.cyan;
+      ctx.fillText(`+${e.pts.toLocaleString()}`, W - edge, fy);
+      ctx.font        = "12px 'VT323', monospace";
+      ctx.fillStyle   = C.muted;
+      ctx.fillText(e.label, W - edge, fy + 13);
+    });
+    ctx.globalAlpha = 1;
+    ctx.textAlign   = 'left';
+    ctx.font        = "16px 'VT323', monospace";
+  }
 
   // wave clear / dock complete banner
   if (gs.waveT > 0) {
@@ -1697,8 +1872,9 @@ function processCheat(gs: GS, raw: string): string {
       gs.hi = Math.max(gs.hi, gs.score);
       return '+10,000 PTS';
     case 'SIDI':
-      gs.buckshot = !gs.buckshot;
-      return gs.buckshot ? 'BUCKSHOT ON' : 'BUCKSHOT OFF';
+      if (gs.buckshot)     { gs.buckshot = false; return 'BUCKSHOT OFF'; }
+      if (gs.buckshotUsed) return 'SIDI ALREADY USED THIS GAME';
+      return '__SIDI_CONFIRM__';
     default:
       return 'UNKNOWN CODE';
   }
@@ -1736,6 +1912,7 @@ export default function GameCanvas() {
   const trackedAscentRef = useRef(false);
   const gameStartRef     = useRef<number>(0);
   const replayNumRef     = useRef<number>(1);
+  const cheatConfirmRef  = useRef<HTMLDivElement>(null);
   const pauseBtnRef      = useRef<HTMLButtonElement>(null);
   const settingsBtnRef   = useRef<HTMLButtonElement>(null);
   const joystickBaseRef  = useRef<HTMLDivElement>(null);
@@ -1746,6 +1923,13 @@ export default function GameCanvas() {
   const cheatSectionRef  = useRef<HTMLDivElement>(null);
   const cheatInputRef    = useRef<HTMLInputElement>(null);
   const cheatStatusRef   = useRef<HTMLParagraphElement>(null);
+  const autoFireRef      = useRef(false);
+  const autoFireBtnRef   = useRef<HTMLButtonElement>(null);
+  const joystickAreaRef  = useRef<HTMLDivElement>(null);
+  const choice1BtnRef    = useRef<HTMLButtonElement>(null);
+  const choice2BtnRef    = useRef<HTMLButtonElement>(null);
+  const ctaLabelRef      = useRef<HTMLParagraphElement>(null);
+  const trackedLivesRef  = useRef(3);
 
   useEffect(() => {
     const canvas  = canvasRef.current!;
@@ -1784,7 +1968,7 @@ export default function GameCanvas() {
             gs.phase  = 'intro';
             gs.introT = 0;
           } else {
-            const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile);
+            const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile, gs.buckshotUsed, gs.pathChoices, gs.activePowerup);
             ng.phase  = 'intro';
             ng.introT = 0;
             gsRef.current = ng;
@@ -1795,11 +1979,20 @@ export default function GameCanvas() {
       if ((e.key === '1' || e.key === '2') && gsRef.current.phase === 'brief') {
         const gs = gsRef.current;
         if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-          const profile = gs.txProfiles[e.key === '1' ? 0 : 1];
-          const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, profile);
+          const choiceIdx = e.key === '1' ? 0 : 1;
+          const choiceNum = (e.key === '1' ? 1 : 2) as 1 | 2;
+          const profile   = gs.txProfiles[choiceIdx];
+          const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, profile, gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: choiceNum }, gs.activePowerup);
           ng.phase  = 'intro';
           ng.introT = 0;
           gsRef.current = ng;
+        }
+      }
+
+      if ((e.key === '1' || e.key === '2') && gsRef.current.phase === 'powerup') {
+        const gs = gsRef.current;
+        if (gs.powerupOffer) {
+          pickPowerup(gs, e.key === '1' ? gs.powerupOffer[0] : gs.powerupOffer[1]);
         }
       }
 
@@ -1887,6 +2080,9 @@ export default function GameCanvas() {
 
     const handleRetry = () => {
       gsRef.current = newGame(1, 0, gsRef.current.hi, 3);
+      trackedPhaseRef.current  = 'brief';
+      trackedWaveRef.current   = 0;
+      trackedAscentRef.current = false;
     };
 
     const handleRandomize = () => {
@@ -1928,7 +2124,7 @@ export default function GameCanvas() {
       const rect = canvas.getBoundingClientRect();
       const cx = (e.clientX - rect.left) * (W / rect.width);
       const cy = (e.clientY - rect.top)  * (H / rect.height);
-      const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(g);
+      const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(g, true);
       if (maxScroll > 0 && g.txScroll < maxScroll - 1
           && cx >= arrowX && cx <= arrowX + arrowW
           && cy >= arrowY && cy <= arrowY + arrowH) {
@@ -1958,8 +2154,13 @@ export default function GameCanvas() {
     };
     const submitCheat = () => {
       const result = processCheat(gsRef.current, cheatInput.value);
-      cheatStatus.textContent = result;
       cheatInput.value = '';
+      if (result === '__SIDI_CONFIRM__') {
+        settingPanel.style.display = 'none';
+        if (cheatConfirmRef.current) cheatConfirmRef.current.style.display = 'flex';
+      } else {
+        cheatStatus.textContent = result;
+      }
     };
     cheatInput.addEventListener('keydown', handleCheatKey);
 
@@ -1974,7 +2175,7 @@ export default function GameCanvas() {
     // ── analog joystick ─────────────────────────────────────────────────
     const joyBase = joystickBaseRef.current!;
     const joyKnob = joystickKnobRef.current!;
-    const MAX_TRAVEL = 28; // px knob can move from center
+    const MAX_TRAVEL = 38; // px knob can move from center
     let   activeTouchId: number | null = null;
     let   joyCx = 0;
 
@@ -2019,7 +2220,7 @@ export default function GameCanvas() {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
       const g = gsRef.current;
-      if (!g.paused && (g.phase === 'play' || g.phase === 'die' || g.phase === 'brief' || g.phase === 'intro' || g.phase === 'jump')) update(g, dt);
+      if (!g.paused && (g.phase === 'play' || g.phase === 'die' || g.phase === 'brief' || g.phase === 'intro' || g.phase === 'jump' || g.phase === 'powerup')) update(g, dt);
       else if (!g.paused) { tickStars(g, dt); tickSparks(g, dt); }
       render(ctx, g, now / 1000, isTouch);
 
@@ -2048,6 +2249,9 @@ export default function GameCanvas() {
           browser:          getBrowser(),
           replay_number:    replayNumRef.current,
           duration_seconds: Math.round((Date.now() - gameStartRef.current) / 1000),
+          path_choices:     Object.fromEntries(
+            Object.entries(g.pathChoices).map(([w, c]) => [`wave_${w}_path`, c])
+          ) as Record<string, 1 | 2>,
         });
       }
       trackedPhaseRef.current = g.phase;
@@ -2065,7 +2269,7 @@ export default function GameCanvas() {
       }
 
       // desktop panels (DOM, no React re-render)
-      const playing = g.phase === 'play' || g.phase === 'die' || g.phase === 'brief' || g.phase === 'intro' || g.phase === 'jump' || g.phase === 'over';
+      const playing = g.phase === 'play' || g.phase === 'die' || g.phase === 'brief' || g.phase === 'intro' || g.phase === 'jump' || g.phase === 'powerup' || g.phase === 'over';
       if (deskScoreRef.current) deskScoreRef.current.textContent = g.score.toLocaleString();
       if (deskHiRef.current)    deskHiRef.current.textContent    = g.hi.toLocaleString();
       if (deskWaveRef.current)  deskWaveRef.current.textContent  = String(g.wave);
@@ -2116,12 +2320,42 @@ export default function GameCanvas() {
         settingsPanelRef.current.style.display = 'none';
       }
 
-      // briefing choice overlay — touch only, shown only when at bottom of scrollable content
+      // auto-fire injection
+      if (autoFireRef.current && g.phase === 'play' && !g.paused) {
+        g.keys.add('z');
+      }
+
+      // haptic feedback — hit and death (Android only; no-ops on iOS/desktop)
+      if (g.lives < trackedLivesRef.current) {
+        navigator.vibrate?.(g.lives === 0 ? [80, 30, 80] : 55);
+      }
+      trackedLivesRef.current = g.lives;
+
+      // reset auto-fire when game ends so the button doesn't stay lit on retry
+      if (g.phase === 'over' && autoFireRef.current) {
+        autoFireRef.current = false;
+        g.keys.delete('z');
+        autoFireBtnRef.current?.classList.remove('is-active');
+      }
+
+      // choice/powerup overlay — shown at bottom during brief choice or powerup selection
       if (choiceOverlayRef.current) {
-        const { maxScroll } = briefScrollBounds(g);
-        const atBottom      = maxScroll <= 0 || g.txScroll >= maxScroll - 1;
-        const showChoices   = isTouch && g.phase === 'brief' && g.txDone && g.txHasChoice && atBottom;
-        choiceOverlayRef.current.style.display = showChoices ? 'flex' : 'none';
+        const { maxScroll } = briefScrollBounds(g, isTouch);
+        const atBottom    = maxScroll <= 0 || g.txScroll >= maxScroll - 1;
+        const showChoices = isTouch && g.phase === 'brief'   && g.txDone && g.txHasChoice && atBottom;
+        const showPowerup = isTouch && g.phase === 'powerup' && !!g.powerupOffer;
+        choiceOverlayRef.current.style.display = showChoices || showPowerup ? 'flex' : 'none';
+        if (showPowerup && g.powerupOffer && choice1BtnRef.current && choice2BtnRef.current) {
+          if (ctaLabelRef.current) ctaLabelRef.current.textContent = '— POWER UP —';
+          choice1BtnRef.current.textContent = POWERUP_INFO[g.powerupOffer[0]].label;
+          choice2BtnRef.current.textContent = POWERUP_INFO[g.powerupOffer[1]].label;
+        } else if (showChoices && choice1BtnRef.current && choice2BtnRef.current) {
+          if (ctaLabelRef.current) ctaLabelRef.current.textContent = '— CHOOSE YOUR PATH —';
+          const l1 = g.txLines.find(l => l.startsWith('[1]'));
+          const l2 = g.txLines.find(l => l.startsWith('[2]'));
+          if (l1) choice1BtnRef.current.textContent = l1.replace('[1] ', '');
+          if (l2) choice2BtnRef.current.textContent = l2.replace('[2] ', '');
+        }
       }
 
       // leaderboard overlay — appears on game over, resets when game restarts
@@ -2208,8 +2442,9 @@ export default function GameCanvas() {
             onTouchEnd={() => {
               const gs = gsRef.current;
               if (gs.paused) return;
+              if (gs.phase === 'powerup') return; // DOM overlay handles powerup picks
               if (gs.phase === 'brief') {
-                const { maxScroll } = briefScrollBounds(gs);
+                const { maxScroll } = briefScrollBounds(gs, true);
                 const atBottom = maxScroll <= 0 || gs.txScroll >= maxScroll - 1;
                 if (!atBottom) {
                   gs.txScroll = maxScroll;
@@ -2224,7 +2459,7 @@ export default function GameCanvas() {
                     gs.phase  = 'intro';
                     gs.introT = 0;
                   } else {
-                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile);
+                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile, gs.buckshotUsed, gs.pathChoices, gs.activePowerup);
                     ng.phase  = 'intro';
                     ng.introT = 0;
                     gsRef.current = ng;
@@ -2237,15 +2472,62 @@ export default function GameCanvas() {
             }}
           />
           <div ref={hudControlsRef} className="hud-controls" style={{ display: 'none' }} aria-hidden="true">
-            <div ref={joystickBaseRef} className="joystick-base">
-              <div ref={joystickKnobRef} className="joystick-knob" />
+            <div ref={joystickAreaRef} className="hud-play-area">
+              <div ref={joystickBaseRef} className="joystick-base">
+                <div ref={joystickKnobRef} className="joystick-knob" />
+              </div>
+              <div className="hud-actions">
+                <button
+                  ref={autoFireBtnRef}
+                  className="hud-btn hud-btn-auto"
+                  onTouchStart={e => {
+                    e.preventDefault();
+                    autoFireRef.current = !autoFireRef.current;
+                    autoFireBtnRef.current?.classList.toggle('is-active', autoFireRef.current);
+                    if (!autoFireRef.current) gsRef.current.keys.delete('z');
+                  }}
+                >AUTO</button>
+                <button
+                  className="hud-btn hud-btn-fire"
+                  onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
+                  onTouchEnd={() => { if (!autoFireRef.current) gsRef.current.keys.delete('z'); }}
+                  onTouchCancel={() => { if (!autoFireRef.current) gsRef.current.keys.delete('z'); }}
+                >FIRE</button>
+              </div>
             </div>
+          </div>
+          <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
+            <p ref={ctaLabelRef} className="touch-choice-cta">— CHOOSE YOUR PATH —</p>
             <button
-              className="hud-btn hud-btn-fire"
-              onTouchStart={e => { e.preventDefault(); gsRef.current.keys.add('z'); }}
-              onTouchEnd={() => gsRef.current.keys.delete('z')}
-              onTouchCancel={() => gsRef.current.keys.delete('z')}
-            >FIRE</button>
+              ref={choice1BtnRef}
+              className="touch-btn touch-btn-choice"
+              onTouchEnd={() => {
+                const gs = gsRef.current;
+                if (gs.phase === 'powerup' && gs.powerupOffer) {
+                  pickPowerup(gs, gs.powerupOffer[0]);
+                } else if (gs.phase === 'brief' && gs.txHasChoice && gs.txDone && gs.txProfiles) {
+                  const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 1 as const }, gs.activePowerup);
+                  ng.phase  = 'intro';
+                  ng.introT = 0;
+                  gsRef.current = ng;
+                }
+              }}
+            >[1]</button>
+            <button
+              ref={choice2BtnRef}
+              className="touch-btn touch-btn-choice"
+              onTouchEnd={() => {
+                const gs = gsRef.current;
+                if (gs.phase === 'powerup' && gs.powerupOffer) {
+                  pickPowerup(gs, gs.powerupOffer[1]);
+                } else if (gs.phase === 'brief' && gs.txHasChoice && gs.txDone && gs.txProfiles) {
+                  const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 2 as const }, gs.activePowerup);
+                  ng.phase  = 'intro';
+                  ng.introT = 0;
+                  gsRef.current = ng;
+                }
+              }}
+            >[2]</button>
           </div>
           <LeaderboardOverlay
             overlayRef={lbOverlayRef}
@@ -2281,39 +2563,16 @@ export default function GameCanvas() {
             cheatStatusRef={cheatStatusRef}
             onCheatSubmit={() => {
               const result = processCheat(gsRef.current, cheatInputRef.current?.value ?? '');
-              if (cheatStatusRef.current) cheatStatusRef.current.textContent = result;
               if (cheatInputRef.current) cheatInputRef.current.value = '';
+              if (result === '__SIDI_CONFIRM__') {
+                if (settingsPanelRef.current) settingsPanelRef.current.style.display = 'none';
+                if (cheatConfirmRef.current)  cheatConfirmRef.current.style.display  = 'flex';
+              } else {
+                if (cheatStatusRef.current) cheatStatusRef.current.textContent = result;
+              }
             }}
           />
 
-          <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
-            <div className="touch-row">
-              <button
-                className="touch-btn touch-btn-choice"
-                onTouchEnd={() => {
-                  const gs = gsRef.current;
-                  if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0]);
-                    ng.phase  = 'intro';
-                    ng.introT = 0;
-                    gsRef.current = ng;
-                  }
-                }}
-              >[1]</button>
-              <button
-                className="touch-btn touch-btn-choice"
-                onTouchEnd={() => {
-                  const gs = gsRef.current;
-                  if (gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1]);
-                    ng.phase  = 'intro';
-                    ng.introT = 0;
-                    gsRef.current = ng;
-                  }
-                }}
-              >[2]</button>
-            </div>
-          </div>
         </div>
         <div ref={sidebarRef} className="station-sidebar">
           <div className="sidebar-title">NEO-7</div>
@@ -2343,6 +2602,49 @@ export default function GameCanvas() {
         </aside>
       </div>
       <p className="game-hint">← → MOVE &nbsp;&nbsp; Z SHOOT &nbsp;&nbsp; ESC MENU</p>
+
+      {/* SIDI confirmation modal */}
+      <div
+        ref={cheatConfirmRef}
+        className="sidi-overlay"
+        style={{ display: 'none' }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sidi-title"
+      >
+        <div className="sidi-modal">
+          <p className="eyebrow">⚠ SIDI PROTOCOL</p>
+          <h2 id="sidi-title">Activate Buckshot Mode?</h2>
+          <p className="sidi-body">
+            Fires three rounds per trigger — wide spread, unlimited shots.
+            This override is available for <strong>one wave only</strong>.
+            Once the wave ends, buckshot is gone. You cannot reactivate it this game.
+          </p>
+          <p className="sidi-body">Use it wisely.</p>
+          <div className="sidi-actions">
+            <button
+              className="primary-action compact"
+              onClick={() => {
+                const gs = gsRef.current;
+                gs.buckshot     = true;
+                gs.buckshotUsed = true;
+                if (cheatConfirmRef.current)  cheatConfirmRef.current.style.display  = 'none';
+                if (cheatStatusRef.current)   cheatStatusRef.current.textContent     = 'BUCKSHOT ON';
+              }}
+            >
+              PROCEED
+            </button>
+            <button
+              className="secondary-action compact"
+              onClick={() => {
+                if (cheatConfirmRef.current) cheatConfirmRef.current.style.display = 'none';
+              }}
+            >
+              CANCEL
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
