@@ -1622,7 +1622,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
 }
 
 function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
-  const edge = isTouch ? 80 : 8;
+  const edge = isTouch ? 80 : 110;
   ctx.font      = "16px 'VT323', monospace";
   ctx.textAlign = 'left';
 
