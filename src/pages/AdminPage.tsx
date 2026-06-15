@@ -732,6 +732,254 @@ function PathComparisonCard({ sessions, waveNum }: { sessions: SessionRow[]; wav
   );
 }
 
+// ── path score flowchart ─────────────────────────────────────────────────────
+
+function PathFlowChart({ sessions }: { sessions: SessionRow[] }) {
+  const K2 = 'wave_2_path';
+  const K4 = 'wave_4_path';
+  const K6 = 'wave_6_path';
+
+  const eligible = sessions.filter(s => s.path_choices?.[K2] != null);
+  if (!eligible.length) {
+    return <p style={{ color: '#c8c0da', fontFamily: 'var(--mono)', fontSize: '0.82rem', margin: 0 }}>No path choice data yet.</p>;
+  }
+
+  // nd returns avg score + most-common powerup for the filtered group.
+  // pwKey is the powerup_choices key for the powerup active DURING this wave:
+  //   "1" = picked after wave 1 → active in wave 2
+  //   "3" = picked after wave 3 → active in wave 4
+  //   "5" = picked after wave 5 → active in wave 6
+  function nd(filter: (s: SessionRow) => boolean, pwKey?: string) {
+    const ss = eligible.filter(filter);
+    const avg = ss.length ? Math.round(ss.reduce((sum, s) => sum + s.score, 0) / ss.length) : 0;
+    let topPw: string | null = null;
+    let topPwPct = 0;
+    if (pwKey && ss.length > 0) {
+      const counts: Record<string, number> = {};
+      ss.forEach(s => {
+        const pw = s.powerup_choices?.[pwKey];
+        if (pw) counts[pw] = (counts[pw] ?? 0) + 1;
+      });
+      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+      if (top) { topPw = top[0]; topPwPct = Math.round((top[1] / ss.length) * 100); }
+    }
+    return { n: ss.length, avg, topPw, topPwPct };
+  }
+
+  const root = nd(() => true);
+  const n2 = [
+    nd(s => s.path_choices?.[K2] === 1, '1'),
+    nd(s => s.path_choices?.[K2] === 2, '1'),
+  ];
+  const n4 = [
+    nd(s => s.path_choices?.[K2] === 1 && s.path_choices?.[K4] === 1, '3'),
+    nd(s => s.path_choices?.[K2] === 1 && s.path_choices?.[K4] === 2, '3'),
+    nd(s => s.path_choices?.[K2] === 2 && s.path_choices?.[K4] === 1, '3'),
+    nd(s => s.path_choices?.[K2] === 2 && s.path_choices?.[K4] === 2, '3'),
+  ];
+  const n6 = [
+    nd(s => s.path_choices?.[K2] === 1 && s.path_choices?.[K4] === 1 && s.path_choices?.[K6] === 1, '5'),
+    nd(s => s.path_choices?.[K2] === 1 && s.path_choices?.[K4] === 1 && s.path_choices?.[K6] === 2, '5'),
+    nd(s => s.path_choices?.[K2] === 1 && s.path_choices?.[K4] === 2 && s.path_choices?.[K6] === 1, '5'),
+    nd(s => s.path_choices?.[K2] === 1 && s.path_choices?.[K4] === 2 && s.path_choices?.[K6] === 2, '5'),
+    nd(s => s.path_choices?.[K2] === 2 && s.path_choices?.[K4] === 1 && s.path_choices?.[K6] === 1, '5'),
+    nd(s => s.path_choices?.[K2] === 2 && s.path_choices?.[K4] === 1 && s.path_choices?.[K6] === 2, '5'),
+    nd(s => s.path_choices?.[K2] === 2 && s.path_choices?.[K4] === 2 && s.path_choices?.[K6] === 1, '5'),
+    nd(s => s.path_choices?.[K2] === 2 && s.path_choices?.[K4] === 2 && s.path_choices?.[K6] === 2, '5'),
+  ];
+
+  // Heat color for W6 leaf nodes based on relative avg score
+  const leafAvgs = n6.filter(d => d.n > 0).map(d => d.avg);
+  const minA = leafAvgs.length ? Math.min(...leafAvgs) : 0;
+  const maxA = leafAvgs.length ? Math.max(...leafAvgs) : 1;
+  function heatBorder(avg: number, n: number): string {
+    if (!n) return 'rgba(122,112,136,0.18)';
+    const t = maxA > minA ? (avg - minA) / (maxA - minA) : 0.5;
+    return t >= 0.67 ? '#66f2a5' : t >= 0.34 ? '#f7c76a' : 'rgba(200,192,218,0.4)';
+  }
+  function heatScore(avg: number, n: number): string {
+    if (!n) return 'rgba(122,112,136,0.28)';
+    const t = maxA > minA ? (avg - minA) / (maxA - minA) : 0.5;
+    return t >= 0.67 ? '#66f2a5' : t >= 0.34 ? '#f7c76a' : '#c8c0da';
+  }
+
+  // SVG layout — nodes are taller to fit the powerup row
+  const SVG_W = 1080;
+  const SVG_H = 358;
+  const COL   = SVG_W / 8; // 135
+
+  const xc = {
+    r:  SVG_W / 2,
+    w2: [SVG_W / 4, (SVG_W * 3) / 4],
+    w4: [COL * 1, COL * 3, COL * 5, COL * 7],
+    w6: Array.from({ length: 8 }, (_, i) => COL * i + COL / 2),
+  };
+
+  const LY = { r: 8,  w2: 90,  w4: 178, w6: 268 } as const;
+  const LH = { r: 60, w2: 66,  w4: 60,  w6: 52  } as const;
+  const NW = { r: 165, w2: 148, w4: 128, w6: 114 } as const;
+  type Level = keyof typeof LY;
+
+  const CYN  = '#00e5ff';
+  const PNK  = '#ff4fd8';
+  const AMB  = '#f7c76a';
+  const MUT  = 'rgba(200,192,218,0.55)';
+  const DMUT = 'rgba(122,112,136,0.5)';
+
+  function mkEdge(fromX: number, toX: number, fl: Level, tl: Level, pNum: 1|2, count: number, key: string) {
+    const y1 = LY[fl] + LH[fl];
+    const y2 = LY[tl];
+    const my = (y1 + y2) / 2;
+    const stroke = pNum === 1 ? 'rgba(0,229,255,0.52)' : 'rgba(255,79,216,0.52)';
+    const ratio = root.n > 0 ? count / root.n : 0;
+    const sw    = count > 0 ? Math.max(1, Math.min(5, ratio * 8)) : 0.5;
+    return (
+      <path key={key}
+        d={`M ${fromX} ${y1} C ${fromX} ${my} ${toX} ${my} ${toX} ${y2}`}
+        stroke={stroke} strokeWidth={sw} fill="none" opacity={count > 0 ? 0.9 : 0.18}
+      />
+    );
+  }
+
+  function mkNode(
+    ncx: number, ty: number, level: Level,
+    label: string,
+    data: { n: number; avg: number; topPw: string | null; topPwPct: number },
+    borderCol: string, scoreCol: string, key: string,
+  ) {
+    const w  = NW[level];
+    const h  = LH[level];
+    const nx = ncx - w / 2;
+    const sw = data.n > 0 ? 1.5 : 0.5;
+
+    const lfs  = level === 'r' ? 10.5 : level === 'w2' ? 9.5 : level === 'w4' ? 9   : 8.5;
+    const pwfs = level === 'r' ? 8.5  : level === 'w2' ? 8   : level === 'w4' ? 7.5 : 7;
+    const sfs  = level === 'r' ? 14   : level === 'w2' ? 12  : level === 'w4' ? 11  : 10;
+    const cfs  = level === 'r' ? 9    : level === 'w2' ? 8.5 : level === 'w4' ? 8   : 7.5;
+
+    const labelY = ty + lfs + 3;
+    const pwY    = labelY + pwfs + 2;
+    const scoreY = ty + h - cfs - 8;
+    const countY = ty + h - 2.5;
+
+    const scoreStr = data.n > 0 ? `avg ${data.avg.toLocaleString()}` : '—';
+    const countStr = data.n > 0 ? `${data.n} players` : 'no data';
+    const pwStr    = data.topPw ? `★ ${data.topPw.toUpperCase()} ${data.topPwPct}%` : null;
+    const labelFill = data.n > 0 ? MUT : 'rgba(122,112,136,0.3)';
+    const countFill = data.n > 0 ? DMUT : 'rgba(122,112,136,0.22)';
+
+    const ariaLabel = `${label}: ${countStr}, ${scoreStr}${pwStr ? `, powerup ${pwStr}` : ''}`;
+
+    return (
+      <g key={key} aria-label={ariaLabel}>
+        <rect x={nx} y={ty} width={w} height={h} rx={2}
+          fill="rgba(7,6,14,0.92)" stroke={borderCol} strokeWidth={sw}
+        />
+        <text x={ncx} y={labelY} textAnchor="middle"
+          fill={labelFill} fontSize={lfs} fontFamily="var(--mono)">
+          {label}
+        </text>
+        {pwStr && (
+          <text x={ncx} y={pwY} textAnchor="middle"
+            fill={AMB} fontSize={pwfs} fontFamily="var(--mono)">
+            {pwStr}
+          </text>
+        )}
+        <text x={ncx} y={scoreY} textAnchor="middle"
+          fill={scoreCol} fontSize={sfs} fontFamily="var(--mono)" fontWeight="bold">
+          {scoreStr}
+        </text>
+        <text x={ncx} y={countY} textAnchor="middle"
+          fill={countFill} fontSize={cfs} fontFamily="var(--mono)">
+          {countStr}
+        </text>
+      </g>
+    );
+  }
+
+  const bestLeaf = n6.reduce<{ idx: number; avg: number } | null>((best, d, i) => {
+    if (d.n < 3) return best;
+    return (!best || d.avg > best.avg) ? { idx: i, avg: d.avg } : best;
+  }, null);
+
+  function bestPathLabel(idx: number): string {
+    const w2 = idx < 4 ? 'W2 P1' : 'W2 P2';
+    const w4 = idx % 4 < 2 ? 'W4 P1' : 'W4 P2';
+    const w6 = idx % 2 === 0 ? 'W6 P1' : 'W6 P2';
+    return `${w2} → ${w4} → ${w6}`;
+  }
+
+  return (
+    <div>
+      <div style={{ overflowX: 'auto' }}>
+        <svg
+          role="img"
+          aria-label="Flowchart of average scores by path and powerup choice combination"
+          viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+          width={SVG_W}
+          style={{ display: 'block', minWidth: SVG_W }}
+        >
+          {/* Edges behind nodes */}
+          {mkEdge(xc.r,     xc.w2[0], 'r',  'w2', 1, n2[0].n, 'r-w2-1')}
+          {mkEdge(xc.r,     xc.w2[1], 'r',  'w2', 2, n2[1].n, 'r-w2-2')}
+          {mkEdge(xc.w2[0], xc.w4[0], 'w2', 'w4', 1, n4[0].n, 'w2-1-w4-1')}
+          {mkEdge(xc.w2[0], xc.w4[1], 'w2', 'w4', 2, n4[1].n, 'w2-1-w4-2')}
+          {mkEdge(xc.w2[1], xc.w4[2], 'w2', 'w4', 1, n4[2].n, 'w2-2-w4-1')}
+          {mkEdge(xc.w2[1], xc.w4[3], 'w2', 'w4', 2, n4[3].n, 'w2-2-w4-2')}
+          {mkEdge(xc.w4[0], xc.w6[0], 'w4', 'w6', 1, n6[0].n, 'w4-0-w6-0')}
+          {mkEdge(xc.w4[0], xc.w6[1], 'w4', 'w6', 2, n6[1].n, 'w4-0-w6-1')}
+          {mkEdge(xc.w4[1], xc.w6[2], 'w4', 'w6', 1, n6[2].n, 'w4-1-w6-2')}
+          {mkEdge(xc.w4[1], xc.w6[3], 'w4', 'w6', 2, n6[3].n, 'w4-1-w6-3')}
+          {mkEdge(xc.w4[2], xc.w6[4], 'w4', 'w6', 1, n6[4].n, 'w4-2-w6-4')}
+          {mkEdge(xc.w4[2], xc.w6[5], 'w4', 'w6', 2, n6[5].n, 'w4-2-w6-5')}
+          {mkEdge(xc.w4[3], xc.w6[6], 'w4', 'w6', 1, n6[6].n, 'w4-3-w6-6')}
+          {mkEdge(xc.w4[3], xc.w6[7], 'w4', 'w6', 2, n6[7].n, 'w4-3-w6-7')}
+
+          {/* Nodes */}
+          {mkNode(xc.r,     LY.r,  'r',  'ALL PLAYERS',     root,  'rgba(200,192,218,0.45)', '#eee8ff', 'root')}
+          {mkNode(xc.w2[0], LY.w2, 'w2', 'WAVE 2 · PATH 1', n2[0], CYN, CYN, 'w2-1')}
+          {mkNode(xc.w2[1], LY.w2, 'w2', 'WAVE 2 · PATH 2', n2[1], PNK, PNK, 'w2-2')}
+          {mkNode(xc.w4[0], LY.w4, 'w4', 'WAVE 4 · PATH 1', n4[0], CYN, CYN, 'w4-0')}
+          {mkNode(xc.w4[1], LY.w4, 'w4', 'WAVE 4 · PATH 2', n4[1], PNK, PNK, 'w4-1')}
+          {mkNode(xc.w4[2], LY.w4, 'w4', 'WAVE 4 · PATH 1', n4[2], CYN, CYN, 'w4-2')}
+          {mkNode(xc.w4[3], LY.w4, 'w4', 'WAVE 4 · PATH 2', n4[3], PNK, PNK, 'w4-3')}
+          {n6.map((data, i) => mkNode(
+            xc.w6[i], LY.w6, 'w6',
+            `WAVE 6 · ${i % 2 === 0 ? 'PATH 1' : 'PATH 2'}`,
+            data, heatBorder(data.avg, data.n), heatScore(data.avg, data.n), `w6-${i}`,
+          ))}
+
+          {/* Legend */}
+          <g transform={`translate(0, ${SVG_H - 22})`}>
+            <line x1={10}  y1={10} x2={34}  y2={10} stroke={CYN} strokeWidth={2.5} opacity={0.6}/>
+            <text x={38}  y={14} fontSize={8.5} fill={DMUT} fontFamily="var(--mono)">Path 1 branch</text>
+            <line x1={140} y1={10} x2={164} y2={10} stroke={PNK} strokeWidth={2.5} opacity={0.6}/>
+            <text x={168} y={14} fontSize={8.5} fill={DMUT} fontFamily="var(--mono)">Path 2 branch</text>
+            <text x={280} y={14} fontSize={8.5} fill={AMB} fontFamily="var(--mono)">★ = top powerup for that group</text>
+            {leafAvgs.length > 0 && (
+              <>
+                <rect x={SVG_W - 340} y={5} width={9} height={9} fill="#66f2a5" opacity={0.8}/>
+                <text x={SVG_W - 327} y={14} fontSize={8.5} fill={DMUT} fontFamily="var(--mono)">High avg score</text>
+                <rect x={SVG_W - 235} y={5} width={9} height={9} fill="#f7c76a" opacity={0.8}/>
+                <text x={SVG_W - 222} y={14} fontSize={8.5} fill={DMUT} fontFamily="var(--mono)">Mid avg score</text>
+                <rect x={SVG_W - 130} y={5} width={9} height={9} fill="#c8c0da" opacity={0.8}/>
+                <text x={SVG_W - 117} y={14} fontSize={8.5} fill={DMUT} fontFamily="var(--mono)">Low avg score</text>
+                <text x={SVG_W - 13}  y={14} fontSize={8} fill="rgba(122,112,136,0.4)" fontFamily="var(--mono)" textAnchor="end">(wave 6 only)</text>
+              </>
+            )}
+          </g>
+        </svg>
+      </div>
+
+      {bestLeaf !== null && (
+        <p style={{ margin: '10px 0 0', fontFamily: 'var(--mono)', fontSize: '0.8rem', color: '#66f2a5' }}>
+          ▲ Best path (n≥3): {bestPathLabel(bestLeaf.idx)} — avg {bestLeaf.avg.toLocaleString()}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── stat tile with tooltip ────────────────────────────────────────────────────
 
 type TipRow = { label: string; value: string; highlight?: boolean };
@@ -1083,6 +1331,10 @@ export default function AdminPage() {
         ))}
 
         <PlayerProgressionCard sessions={filteredSessions}/>
+
+        <ChartCard title="Path Score Flowchart" color="var(--cyan)" wide>
+          <PathFlowChart sessions={filteredSessions}/>
+        </ChartCard>
       </div>
 
       {/* ── recent sessions table ── */}
