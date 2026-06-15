@@ -294,6 +294,28 @@ button:disabled {
   opacity: 0.45;
 }
 
+/* ── keyboard focus indicators (WCAG 2.1 AA) ── */
+.primary-action:focus-visible,
+.secondary-action:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.pause-btn:focus-visible,
+.settings-btn:focus-visible,
+.cheat-go-btn:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.touch-btn:focus-visible,
+.touch-btn-choice:focus-visible,
+.lb-random-btn:focus-visible,
+.admin-filter-clear:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
 
 /* ── station approach sidebar ── */
 .game-row {
@@ -1511,7 +1533,8 @@ button:disabled {
   transition: border-color 80ms ease;
 }
 
-.admin-filter-select:focus {
+.admin-filter-select:focus,
+.admin-filter-select:focus-visible {
   border-color: rgba(0, 229, 255, 0.45);
   box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.18);
 }
@@ -1782,6 +1805,12 @@ button:disabled {
 .admin-td-score { color: var(--cyan); }
 .admin-td-wave  { color: var(--green); }
 .admin-td-dur   { color: var(--amber); }
+
+.retention-empty {
+  color: rgba(122, 112, 136, 0.4);
+  font-family: var(--mono);
+  text-align: center;
+}
 
 .admin-player-id {
   color: var(--muted);

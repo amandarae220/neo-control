@@ -939,9 +939,11 @@ function update(gs: GS, dt: number) {
 
   /* ── player shoot ── */
   gs.shootT = Math.max(0, gs.shootT - dt);
-  const canShoot  = gs.keys.has(' ') || gs.keys.has('z');
-  const useSpread = gs.buckshot || gs.activePowerup === 'spread';
-  const underCap  = useSpread || gs.bullets.filter(b => b.player).length < MAX_BULLETS;
+  const canShoot    = gs.keys.has(' ') || gs.keys.has('z');
+  const useSpread   = gs.buckshot || gs.activePowerup === 'spread';
+  const MAX_SPREAD  = 6;
+  const spreadCount = useSpread ? gs.bullets.filter(b => b.player).length : 0;
+  const underCap    = useSpread ? spreadCount < MAX_SPREAD : gs.bullets.filter(b => b.player).length < MAX_BULLETS;
   if (canShoot && gs.shootT <= 0 && underCap) {
     if (useSpread) {
       const spread = 55;
@@ -951,7 +953,7 @@ function update(gs: GS, dt: number) {
     } else {
       gs.bullets.push({ id: gs.seq++, x: gs.px, y: PY - 12, vx: 0, vy: B_SPD, player: true });
     }
-    gs.shootT = gs.activePowerup === 'rapid' ? 0.09 : 0.18;
+    gs.shootT = gs.activePowerup === 'rapid' ? 0.09 : useSpread ? 0.24 : 0.18;
   }
 
   /* ── move bullets ── */
@@ -2165,12 +2167,38 @@ export default function GameCanvas() {
       cheatInput.value = '';
       if (result === '__SIDI_CONFIRM__') {
         settingPanel.style.display = 'none';
-        if (cheatConfirmRef.current) cheatConfirmRef.current.style.display = 'flex';
+        if (cheatConfirmRef.current) {
+          cheatConfirmRef.current.style.display = 'flex';
+          // focus first button so keyboard users can respond immediately
+          cheatConfirmRef.current.querySelector<HTMLElement>('button')?.focus();
+        }
       } else {
         cheatStatus.textContent = result;
       }
     };
     cheatInput.addEventListener('keydown', handleCheatKey);
+
+    // ── SIDI modal focus trap ────────────────────────────────────────────
+    const handleSidiFocusTrap = (e: KeyboardEvent) => {
+      const modal = cheatConfirmRef.current;
+      if (!modal || modal.style.display === 'none') return;
+      if (e.key === 'Escape') {
+        modal.style.display = 'none';
+        settingsEl.focus();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusable = Array.from(modal.querySelectorAll<HTMLElement>('button:not([disabled])'));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last  = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleSidiFocusTrap);
 
     const pauseEl = pauseBtnRef.current!;
     const handlePauseDown = (e: Event) => {
@@ -2363,7 +2391,9 @@ export default function GameCanvas() {
         const atBottom    = maxScroll <= 0 || g.txScroll >= maxScroll - 1;
         const showChoices = isTouch && g.phase === 'brief'   && g.txDone && g.txHasChoice && atBottom;
         const showPowerup = isTouch && g.phase === 'powerup' && !!g.powerupOffer;
-        choiceOverlayRef.current.style.display = showChoices || showPowerup ? 'flex' : 'none';
+        const overlayVisible = showChoices || showPowerup;
+        choiceOverlayRef.current.style.display = overlayVisible ? 'flex' : 'none';
+        choiceOverlayRef.current.setAttribute('aria-hidden', String(!overlayVisible));
         if (showPowerup && g.powerupOffer && choice1BtnRef.current && choice2BtnRef.current) {
           if (ctaLabelRef.current) ctaLabelRef.current.textContent = '— POWER UP —';
           choice1BtnRef.current.textContent = POWERUP_INFO[g.powerupOffer[0]].label;
@@ -2418,6 +2448,7 @@ export default function GameCanvas() {
       retryEl.removeEventListener('click', handleRetry);
       randomEl.removeEventListener('click', handleRandomize);
       document.removeEventListener('keydown', handleFocusTrap);
+      document.removeEventListener('keydown', handleSidiFocusTrap);
       canvas.removeEventListener('click', handleBriefClick);
       pauseEl.removeEventListener('pointerdown', handlePauseDown);
       settingsEl.removeEventListener('pointerdown', toggleSettings);
@@ -2515,7 +2546,7 @@ export default function GameCanvas() {
               </div>
             </div>
           </div>
-          <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true">
+          <div ref={choiceOverlayRef} className="touch-choice-overlay" style={{ display: 'none' }} aria-hidden="true" aria-label="Choose an option">
             <p ref={ctaLabelRef} className="touch-choice-cta">— CHOOSE YOUR PATH —</p>
             <button
               ref={choice1BtnRef}

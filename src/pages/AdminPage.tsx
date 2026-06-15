@@ -485,7 +485,7 @@ function retentionColor(pct: number): string {
 }
 
 function RetentionCell({ cell }: { cell: RetentionCell }) {
-  if (cell === null) return <td style={{ color: 'rgba(122,112,136,0.4)', fontFamily: 'var(--mono)', textAlign: 'center' }}>—</td>;
+  if (cell === null) return <td className="retention-empty">—</td>;
   return (
     <td style={{ textAlign: 'center' }}>
       <span style={{ fontFamily: 'var(--mono)', color: retentionColor(cell.pct), fontSize: '1rem' }}>
@@ -838,11 +838,12 @@ export default function AdminPage() {
             onChange={e => { setInput(e.target.value); setError(null); }}
             onKeyDown={e => e.key === 'Enter' && attempt()}
             aria-label="Admin passphrase"
+            aria-describedby={error ? 'admin-auth-error' : undefined}
             autoFocus
           />
           <button className="primary-action compact" onClick={attempt}>ENTER</button>
         </div>
-        {error && <p className="admin-error">{error}</p>}
+        {error && <p id="admin-auth-error" role="alert" className="admin-error">{error}</p>}
       </main>
     );
   }
