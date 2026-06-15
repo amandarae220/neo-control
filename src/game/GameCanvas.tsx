@@ -939,9 +939,11 @@ function update(gs: GS, dt: number) {
 
   /* ── player shoot ── */
   gs.shootT = Math.max(0, gs.shootT - dt);
-  const canShoot  = gs.keys.has(' ') || gs.keys.has('z');
-  const useSpread = gs.buckshot || gs.activePowerup === 'spread';
-  const underCap  = useSpread || gs.bullets.filter(b => b.player).length < MAX_BULLETS;
+  const canShoot    = gs.keys.has(' ') || gs.keys.has('z');
+  const useSpread   = gs.buckshot || gs.activePowerup === 'spread';
+  const MAX_SPREAD  = 6;
+  const spreadCount = useSpread ? gs.bullets.filter(b => b.player).length : 0;
+  const underCap    = useSpread ? spreadCount < MAX_SPREAD : gs.bullets.filter(b => b.player).length < MAX_BULLETS;
   if (canShoot && gs.shootT <= 0 && underCap) {
     if (useSpread) {
       const spread = 55;
@@ -951,7 +953,7 @@ function update(gs: GS, dt: number) {
     } else {
       gs.bullets.push({ id: gs.seq++, x: gs.px, y: PY - 12, vx: 0, vy: B_SPD, player: true });
     }
-    gs.shootT = gs.activePowerup === 'rapid' ? 0.09 : 0.18;
+    gs.shootT = gs.activePowerup === 'rapid' ? 0.09 : useSpread ? 0.24 : 0.18;
   }
 
   /* ── move bullets ── */
