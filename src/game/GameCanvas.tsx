@@ -2128,13 +2128,73 @@ export default function GameCanvas() {
     document.addEventListener('keydown', handleFocusTrap);
 
     // ── scroll arrow click (desktop mouse) ──────────────────────────────
-    const handleBriefClick = (e: MouseEvent) => {
-      const g = gsRef.current;
-      if (g.phase !== 'brief') return;
+    // Returns canvas-space coords from a MouseEvent
+    const canvasCoords = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
-      const cx = (e.clientX - rect.left) * (W / rect.width);
-      const cy = (e.clientY - rect.top)  * (H / rect.height);
-      const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(g, true);
+      return {
+        cx: (e.clientX - rect.left) * (W / rect.width),
+        cy: (e.clientY - rect.top)  * (H / rect.height),
+      };
+    };
+
+    // Hit-test the clickable choice / powerup zones (desktop only)
+    const desktopHitZone = (cx: number, cy: number, g: GS): 0 | 1 | 2 | 'more' | null => {
+      if (isTouch) return null;
+      const bh = H - TX_TOP - 36;
+
+      if (g.phase === 'powerup' && g.powerupOffer) {
+        const bw = W - TX_PAD * 2;
+        const inX = cx >= TX_PAD + 1 && cx <= TX_PAD + bw - 1;
+        if (inX && cy >= TX_TOP + 82 && cy <= TX_TOP + 126) return 1;
+        if (inX && cy >= TX_TOP + 134 && cy <= TX_TOP + 178) return 2;
+      }
+
+      if (g.phase === 'brief' && g.txDone && g.txHasChoice) {
+        const btnH = 28, btnW = 82, gap = 10;
+        const bx1  = W / 2 - btnW - gap / 2;
+        const bx2  = W / 2 + gap / 2;
+        const by   = TX_TOP + bh - 8 - btnH;
+        if (cy >= by && cy <= by + btnH) {
+          if (cx >= bx1 && cx <= bx1 + btnW) return 1;
+          if (cx >= bx2 && cx <= bx2 + btnW) return 2;
+        }
+      }
+
+      if (g.phase === 'brief') {
+        const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(g, false);
+        if (maxScroll > 0 && g.txScroll < maxScroll - 1
+            && cx >= arrowX && cx <= arrowX + arrowW
+            && cy >= arrowY && cy <= arrowY + arrowH) return 'more';
+      }
+
+      return null;
+    };
+
+    const handleBriefClick = (e: MouseEvent) => {
+      const g    = gsRef.current;
+      const { cx, cy } = canvasCoords(e);
+      const zone = desktopHitZone(cx, cy, g);
+
+      if (zone === 1 || zone === 2) {
+        const idx = zone - 1;
+        if (g.phase === 'powerup' && g.powerupOffer) {
+          const kind = g.powerupOffer[idx];
+          powerupChoicesRef.current[g.wave] = kind;
+          pickPowerup(g, kind);
+          return;
+        }
+        if (g.phase === 'brief' && g.txProfiles) {
+          const choiceNum = zone as 1 | 2;
+          const ng = newGame(g.wave + 1, g.score, g.hi, g.lives, g.txProfiles[idx], g.buckshotUsed, { ...g.pathChoices, [g.wave + 1]: choiceNum }, g.activePowerup);
+          ng.phase = 'intro'; ng.introT = 0;
+          gsRef.current = ng;
+        }
+        return;
+      }
+
+      // "More ↓" scroll button — also handle non-desktop here for safety
+      if (g.phase !== 'brief') return;
+      const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(g, isTouch);
       if (maxScroll > 0 && g.txScroll < maxScroll - 1
           && cx >= arrowX && cx <= arrowX + arrowW
           && cy >= arrowY && cy <= arrowY + arrowH) {
@@ -2142,6 +2202,14 @@ export default function GameCanvas() {
       }
     };
     canvas.addEventListener('click', handleBriefClick);
+
+    const handleCanvasMouseMove = (e: MouseEvent) => {
+      const g = gsRef.current;
+      const { cx, cy } = canvasCoords(e);
+      canvas.style.cursor = desktopHitZone(cx, cy, g) !== null ? 'pointer' : '';
+    };
+    canvas.addEventListener('mousemove', handleCanvasMouseMove);
+    canvas.addEventListener('mouseleave', () => { canvas.style.cursor = ''; });
 
     // ── settings panel ───────────────────────────────────────────────────
     const settingsEl    = settingsBtnRef.current!;
@@ -2449,7 +2517,8 @@ export default function GameCanvas() {
       randomEl.removeEventListener('click', handleRandomize);
       document.removeEventListener('keydown', handleFocusTrap);
       document.removeEventListener('keydown', handleSidiFocusTrap);
-      canvas.removeEventListener('click', handleBriefClick);
+      canvas.removeEventListener('click',     handleBriefClick);
+      canvas.removeEventListener('mousemove', handleCanvasMouseMove);
       pauseEl.removeEventListener('pointerdown', handlePauseDown);
       settingsEl.removeEventListener('pointerdown', toggleSettings);
       cheatInput.removeEventListener('keydown', handleCheatKey);
