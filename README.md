@@ -31,7 +31,7 @@ You're a space cadet who picked up the wrong phone. NEO Control puts you in char
 **Prerequisites:** Node 18+, npm
 
 ```bash
-git clone https://github.com/amandarae19/neo-control
+git clone https://github.com/amandarae220/neo-control
 cd neo-control
 npm install
 
