@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -12,6 +12,7 @@ export default function LandingPage() {
       <button className="primary-action compact" onClick={() => navigate("/game")}>
         Accept Mission
       </button>
+      <Link to="/privacy" className="landing-privacy">Privacy Policy</Link>
     </main>
   );
 }

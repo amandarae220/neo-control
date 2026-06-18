@@ -1970,3 +1970,123 @@ button:disabled {
     order: -1;
   }
 }
+
+/* ── privacy page ────────────────────────────────────────────────────────── */
+
+.privacy-page {
+  max-width: 720px;
+  padding-top: 48px;
+  padding-bottom: 64px;
+}
+
+.privacy-page h1 {
+  color: var(--cyan);
+  margin: 4px 0 6px;
+}
+
+.privacy-updated {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  margin: 0 0 40px;
+  letter-spacing: 0.1em;
+}
+
+.privacy-section {
+  margin-bottom: 28px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.privacy-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 40px;
+}
+
+.privacy-section h2 {
+  color: var(--heading);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0 0 10px;
+}
+
+.privacy-section p,
+.privacy-section li {
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.75;
+  margin: 0;
+}
+
+.privacy-section p + p {
+  margin-top: 10px;
+}
+
+.privacy-section ul {
+  margin: 8px 0 0;
+  padding-left: 1.4em;
+}
+
+.privacy-section li {
+  margin-bottom: 6px;
+}
+
+.privacy-section strong {
+  color: var(--heading);
+  font-weight: 600;
+}
+
+.privacy-section a {
+  color: var(--cyan);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(0, 229, 255, 0.4);
+}
+
+.privacy-section a:hover {
+  text-decoration-color: var(--cyan);
+}
+
+.privacy-section code {
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  background: rgba(0, 229, 255, 0.07);
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  border-radius: 2px;
+  padding: 1px 5px;
+  color: var(--cyan);
+}
+
+.privacy-back {
+  display: inline-block;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: color 80ms ease;
+}
+
+.privacy-back:hover {
+  color: var(--text);
+}
+
+/* subtle privacy link on landing page */
+.landing-privacy {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-decoration: none;
+  text-transform: uppercase;
+  opacity: 0.6;
+  transition: opacity 80ms ease;
+  margin-top: -8px;
+}
+
+.landing-privacy:hover {
+  opacity: 1;
+}
