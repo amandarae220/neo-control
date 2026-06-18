@@ -61,7 +61,7 @@ export default function PrivacyPage() {
         <h2>Your Rights</h2>
         <p>
           You can request deletion of any data associated with your player ID at any time.
-          Email <a href="mailto:amandarae19@gmail.com">amandarae19@gmail.com</a> with your
+          Email <a href="mailto:amandaraedev@gmail.com">amandaraedev@gmail.com</a> with your
           player ID, which you can find in your browser's <code>localStorage</code> under
           the key <code>neo_player_id</code>. We will remove your records within 30 days.
         </p>
@@ -74,7 +74,7 @@ export default function PrivacyPage() {
       <section className="privacy-section">
         <h2>Contact</h2>
         <p>
-          Questions about this policy? Email <a href="mailto:amandarae19@gmail.com">amandarae19@gmail.com</a>.
+          Questions about this policy? Email <a href="mailto:amandaraedev@gmail.com">amandaraedev@gmail.com</a>.
         </p>
       </section>
 
