@@ -75,11 +75,16 @@ const INTRO_TRANSMISSION: string[] = [
   'SPACE CADET. THIS IS NEO CONTROL.',
   '',
   'TODAY\'S OBJECTIVE: ROUTINE SUPPLY RUN TO NEO-7.',
-  'THE AUTOPILOT IS BROKEN, WHICH IS',
-  'THE ONLY REASON WE CALLED YOU.',
+  'THE AUTOPILOT IS BROKEN.',
+  'YOU WERE THE ONLY ONE WHO PICKED UP',
+  'THE PHONE.',
+  '',
+  'YOUR SHIP IS SMALL. FUEL IS LIMITED.',
+  'WATCH THE GAUGE. DEBRIS IN THE FIELD',
+  'WILL TOP IT UP. DO NOT IGNORE',
+  'THE GAUGE.',
   '',
   'THE STATION IS DIRECTLY AHEAD.',
-  'CAN\'T MISS IT. SERIOUSLY THOUGH,',
   'PLEASE DO NOT HIT IT. DAMAGE DONE',
   'TO THE DOCK WILL BE DEDUCTED FROM',
   'YOUR PAY.',
@@ -265,6 +270,11 @@ interface GravRock {
   mass: number; radius: number;
 }
 
+interface DebrisParticle {
+  id: number; x: number; y: number; vx: number; vy: number;
+  life: number; maxLife: number;
+}
+
 interface Planet {
   id: number; x: number; y: number; vx: number;
   radius: number; mass: number;
@@ -316,6 +326,8 @@ interface GS {
   gtaDroneHP:          number;
   gtaDroneShootT:      number;
   stickX:              number;
+  fuel:            number;
+  debrisParticles: DebrisParticle[];
   buckshot:        boolean;
   buckshotUsed:    boolean;
   pathChoices:     Partial<Record<number, 1 | 2>>;
@@ -530,6 +542,8 @@ function newGame(
     totalEnemies:    enemies.length,
     scoreLog:        [],
     activeProfile:   profile,
+    fuel:            1,
+    debrisParticles: [],
     buckshot:        false,
     buckshotUsed,
     pathChoices,
@@ -683,6 +697,51 @@ function tickGravRocks(gs: GS, dt: number) {
       const f = rock.mass * 0.15 * surgeMult * (1 - pd / rock.radius) / pd;
       gs.px += pdx * f * dt;
       gs.px  = Math.max(14, Math.min(W - 14, gs.px));
+    }
+    return true;
+  });
+}
+
+/* ── debris / fuel ───────────────────────────────────────────────────── */
+const FUEL_DRAIN_THRUST = 0.030;
+const FUEL_PER_DEBRIS   = 0.012;
+const DEBRIS_COLLECT_R  = 12;
+
+function spawnDebris(gs: GS, x: number, y: number, count: number) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 8 + Math.random() * 18;
+    gs.debrisParticles.push({
+      id:      gs.seq++,
+      x:       x + (Math.random() - 0.5) * 12,
+      y:       y + (Math.random() - 0.5) * 12,
+      vx:      Math.cos(angle) * speed,
+      vy:      Math.sin(angle) * speed + 8,
+      life:    1,
+      maxLife: 10 + Math.random() * 6,
+    });
+  }
+}
+
+function tickDebris(gs: GS, dt: number) {
+  if (gs.dockSeq) return;
+
+  const keyThrust    = gs.keys.has('ArrowLeft') || gs.keys.has('ArrowRight') ||
+                       gs.keys.has('a') || gs.keys.has('d');
+  const stickThrust  = Math.abs(gs.stickX) > 0.08 ? Math.abs(gs.stickX) : 0;
+  const thrustFactor = keyThrust ? 1 : stickThrust;
+  gs.fuel = Math.max(0, gs.fuel - FUEL_DRAIN_THRUST * thrustFactor * dt);
+
+  gs.debrisParticles = gs.debrisParticles.filter(p => {
+    p.x   += p.vx * dt;
+    p.y   += p.vy * dt;
+    p.life -= dt / p.maxLife;
+    if (p.life <= 0 || p.y > H + 20 || p.x < -20 || p.x > W + 20) return false;
+
+    const dx = p.x - gs.px, dy = p.y - PY;
+    if (Math.sqrt(dx * dx + dy * dy) < DEBRIS_COLLECT_R) {
+      gs.fuel = Math.min(1, gs.fuel + FUEL_PER_DEBRIS);
+      return false;
     }
     return true;
   });
@@ -977,6 +1036,7 @@ function update(gs: GS, dt: number) {
         gs.score += awarded;
         gs.hi = Math.max(gs.hi, gs.score);
         logScore(gs, e.kind === 2 ? 'BOSS' : e.kind === 1 ? 'FIGHTER' : 'DRONE', awarded);
+        spawnDebris(gs, e.x, e.y, 6 + Math.floor(Math.random() * 4));
         killedEnemies.add(e.id);
         usedBullets.add(b.id);
       }
@@ -1030,6 +1090,7 @@ function update(gs: GS, dt: number) {
     gs.bullets      = gs.bullets.filter(b => b.player);
     gs.planets      = [];
     gs.gravRocks    = [];
+    gs.debrisParticles = [];
     gs.ufo          = null;
     gs.ufoT         = 999;
     gs.spawnPlanetT = 999;
@@ -1123,6 +1184,7 @@ function update(gs: GS, dt: number) {
     }
     tickUFO(gs, dt);
     tickGravRocks(gs, dt);
+    tickDebris(gs, dt);
     tickPlanets(gs, dt);
   }
   tickSparks(gs, dt); tickStars(gs, dt);
@@ -1580,6 +1642,18 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     drawSpr(ctx, GRAV_SPR, C.amber, rock.x, rock.y, PX + 1);
   });
 
+  // debris particles — small clustered plus signs from destroyed enemies
+  gs.debrisParticles.forEach(p => {
+    const alpha = p.life * (0.12 + 0.08 * Math.sin(t * 5 + p.id * 0.7));
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle   = C.green;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = p.life * 0.9;
+    ctx.fillRect(Math.floor(p.x),     Math.floor(p.y - 2), 1, 5); // vertical
+    ctx.fillRect(Math.floor(p.x - 2), Math.floor(p.y),     5, 1); // horizontal
+  });
+  ctx.globalAlpha = 1;
+
   // UFO
   if (gs.ufo) {
     const flash = Math.sin(t * 9) > 0.5;
@@ -1789,6 +1863,65 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
   ctx.font      = "16px 'VT323', monospace";
   ctx.textAlign = 'left';
 
+  // fuel gauge — analog dial (E left · arc over top · F right)
+  {
+    const GR      = 20;
+    const E_ANG   = 7 * Math.PI / 6;   // upper-left (10 o'clock)
+    const F_ANG   = 11 * Math.PI / 6;  // upper-right (2 o'clock)
+    const gcx     = 42;
+    const gcy     = isTouch ? H - 82 : H - 48;
+    const fuelClr = gs.fuel > 0.5 ? C.green : gs.fuel > 0.25 ? C.amber : C.red;
+    const nAngle  = E_ANG + gs.fuel * (F_ANG - E_ANG);
+
+    ctx.lineCap = 'round';
+
+    // background track
+    ctx.strokeStyle = 'rgba(200,192,218,0.15)';
+    ctx.lineWidth   = 4;
+    ctx.beginPath();
+    ctx.arc(gcx, gcy, GR, E_ANG, F_ANG, false);
+    ctx.stroke();
+
+    // filled arc (E → current level)
+    if (gs.fuel > 0.01) {
+      ctx.strokeStyle = fuelClr;
+      ctx.globalAlpha = 0.85;
+      ctx.beginPath();
+      ctx.arc(gcx, gcy, GR, E_ANG, nAngle, false);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // needle
+    ctx.strokeStyle = fuelClr;
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(gcx, gcy);
+    ctx.lineTo(gcx + (GR - 4) * Math.cos(nAngle), gcy + (GR - 4) * Math.sin(nAngle));
+    ctx.stroke();
+
+    // pivot dot
+    ctx.fillStyle = 'rgba(200,192,218,0.7)';
+    ctx.beginPath();
+    ctx.arc(gcx, gcy, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // E / F end labels
+    const lR = GR + 9;
+    ctx.font      = "11px 'VT323', monospace";
+    ctx.fillStyle = C.muted;
+    ctx.textAlign = 'center';
+    ctx.fillText('E', gcx + lR * Math.cos(E_ANG), gcy + lR * Math.sin(E_ANG) + 4);
+    ctx.fillText('F', gcx + lR * Math.cos(F_ANG), gcy + lR * Math.sin(F_ANG) + 4);
+
+    // FUEL label inside the bowl
+    ctx.fillText('FUEL', gcx, gcy + 12);
+
+    ctx.lineCap   = 'butt';
+    ctx.lineWidth = 1;
+    ctx.textAlign = 'left';
+  }
+
   // lives — shift up on touch so the fixed HUD controls bar doesn't overlap
   const livesY = isTouch ? H - 48 : H - 14;
   for (let i = 0; i < gs.lives; i++)
@@ -1906,6 +2039,7 @@ export default function GameCanvas() {
   const deskMissionRef   = useRef<HTMLSpanElement>(null);
   const deskPctRef       = useRef<HTMLSpanElement>(null);
   const deskFillRef      = useRef<HTMLDivElement>(null);
+  const deskFuelRef      = useRef<HTMLSpanElement>(null);
   const deskLogRef       = useRef<HTMLUListElement>(null);
   const navigate         = useNavigate();
   const gsRef            = useRef<GS>(introGame());
@@ -2388,6 +2522,7 @@ export default function GameCanvas() {
       if (deskScoreRef.current) deskScoreRef.current.textContent = g.score.toLocaleString();
       if (deskHiRef.current)    deskHiRef.current.textContent    = g.hi.toLocaleString();
       if (deskWaveRef.current)  deskWaveRef.current.textContent  = String(g.wave);
+      if (deskFuelRef.current)  deskFuelRef.current.textContent  = `${Math.round(g.fuel * 100)}%`;
       if (playing && deskMissionRef.current && deskPctRef.current && deskFillRef.current) {
         const pct = g.missionKind === 'approach'
           ? Math.round(g.stationProgress * 100)
@@ -2547,6 +2682,10 @@ export default function GameCanvas() {
           <div className="desk-stat">
             <span className="desk-stat-label">WAVE</span>
             <span ref={deskWaveRef} className="desk-stat-value">1</span>
+          </div>
+          <div className="desk-stat">
+            <span className="desk-stat-label">FUEL</span>
+            <span ref={deskFuelRef} className="desk-stat-value">100%</span>
           </div>
           <div className="desk-divider" />
           <p className="desk-panel-title">SCORE LOG</p>
