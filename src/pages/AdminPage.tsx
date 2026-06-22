@@ -624,8 +624,8 @@ function splitBy(sessions: SessionRow[], key: keyof SessionRow): Bar[] {
 
 const PATH_META = {
   2: [
-    { name: 'Gravity Field Approach', tag: 'Dense rocks · strong pull' },
-    { name: 'High-Velocity Corridor', tag: 'Fast rocks · +30% bonus' },
+    { name: 'Debris Field',           tag: 'Slow rocks · low gravity · ambient debris' },
+    { name: 'High-Velocity Corridor', tag: 'Fast rocks · burns fuel · +30% bonus' },
   ],
   4: [
     { name: 'Direct Intercept',       tag: 'High UFOs · +50% bonus' },
