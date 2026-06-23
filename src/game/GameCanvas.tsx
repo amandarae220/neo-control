@@ -58,6 +58,7 @@ interface PhysicsProfile {
   diveFreq:  number; // dive interval multiplier (>1 = fewer dives)
   ufoFreq:   number; // UFO interval multiplier (>1 = fewer UFOs)
   bonusMult: number; // score multiplier
+  preDebris?: number; // ambient debris pre-seeded at level start
 }
 const DEFAULT_PROFILE: PhysicsProfile = {
   gravMass: 1, rockSpeed: 1, diveFreq: 1, ufoFreq: 1, bonusMult: 1,
@@ -99,76 +100,81 @@ const TRANSMISSIONS: WaveBrief[] = [
       '',
       'SPACE CADET.',
       '',
-      'YOU\'VE ENTERED SECTOR 7-G WITHOUT',
-      'TRANSIT CLEARANCE. THOSE DRONES',
-      'WERE TRAFFIC ENFORCEMENT... YOU',
-      'DESTROYED ELEVEN... AND IT\'S ALL ON',
-      'SECURITY FOOTAGE. THEY\'VE ESCALATED',
-      'TO THE GALACTIC TRANSIT AUTHORITY.',
+      'NEO-7 DOCK: CONFIRMED.',
+      'THOSE DRONES YOU SHOT DOWN ON APPROACH',
+      'WERE GALACTIC TRANSIT AUTHORITY.',
+      'ALL ELEVEN. ON RECORD.',
+      'THERE IS NOW A WARRANT.',
       '',
-      'TWO ESCAPE VECTORS. CHOOSE:',
+      'CHECK YOUR GAUGE BEFORE YOU CHOOSE.',
       '',
-      '[1] GRAVITY FIELD APPROACH',
-      '    DENSE ROCKS. STRONG PULL.',
-      '    LOSE THEM IN THE ASTEROID WAKE.',
+      '[1] DEBRIS FIELD',
+      '    SLOW ROCKS. LOW GRAVITY.',
+      '    DEBRIS-RICH. GOOD FOR REFUELING.',
       '',
       '[2] HIGH-VELOCITY CORRIDOR',
-      '    FAST ROCKS. LIGHTER GRAVITY.',
-      '    FASTER. ALSO INSANE.  +30% BONUS.',
+      '    FAST ROCKS. BURNS MORE FUEL.',
+      '    FASTER EXIT.  +30% BONUS.',
     ],
     profiles: [
-      { gravMass: 2.2, rockSpeed: 0.7,  diveFreq: 0.5, ufoFreq: 1,   bonusMult: 1   },
-      { gravMass: 0.5, rockSpeed: 1.6,  diveFreq: 1.8, ufoFreq: 1,   bonusMult: 1.3 },
+      { gravMass: 0.8, rockSpeed: 0.6, diveFreq: 0.3, ufoFreq: 0.6, bonusMult: 1,   preDebris: 10 },
+      { gravMass: 0.5, rockSpeed: 1.6, diveFreq: 1.8, ufoFreq: 1,   bonusMult: 1.3 },
     ],
   },
-  { // wave 2 → wave 3
+  { // wave 2 → wave 3: transit to Velon-4 Lagrange point, commandeer freighter
     lines: [
       '>>> NEO CONTROL  //  REROUTING',
       '',
       'SPACE CADET.',
       '',
-      'DUE TO THE SECTOR 7-G INCIDENT,',
-      'YOUR STANDARD RETURN PATH IS NOW',
-      'A CRIME SCENE.',
+      'NEO-7 DEPARTURE: CONFIRMED.',
+      'STANDARD RETURN ROUTE: CLOSED.',
+      'REASON: YOU.',
       '',
-      'WE\'RE ROUTING YOU THROUGH THE',
-      'VELON-4 CORRIDOR. VELON-4 IS A',
-      'LARGE PLANET. IT HAS SIGNIFICANT',
-      'GRAVITY.',
+      'REROUTING THROUGH THE',
+      'VELON-4 LAGRANGE POINT.',
+      'THERE IS A FREIGHTER IN HOLDING ORBIT.',
+      'IT IS NOT OURS.',
+      '',
+      'DOCK WITH IT. COMMANDEER IT.',
+      'THE CREW IS ALSO WANTED.',
+      'THEY WILL UNDERSTAND.',
       '',
       'THE TEXTBOOK RESPONSE IS A HOHMANN',
       'TRANSFER ORBIT. YOU DIDN\'T STUDY',
       'FOR THAT EXAM.',
       '',
-      'JUST DON\'T FLY INTO IT.',
-      'THE ROCKS WILL DO THE REST.',
+      'FLY THROUGH WHAT\'S IN YOUR WAY.',
       '',
-      'P.S. YOUR GTA FILE HAS BEEN UPGRADED',
-      'FROM "INCIDENT" TO "ONGOING MATTER."',
+      'P.S. YOUR GTA FILE HAS BEEN',
+      'UPGRADED TO "ACTIVE PURSUIT."',
     ],
   },
-  { // wave 3 → wave 4: tactical choice
+  { // wave 3 → wave 4: freighter is a liability, tactical choice
     lines: [
-      '>>> NEO CONTROL  //  INTEL UPDATE',
+      '>>> NEO CONTROL  //  SITUATION UPDATE',
       '',
       'SPACE CADET.',
       '',
-      'FORMAL COMPLAINTS RECEIVED FROM',
-      'THE GTA, TWO MERCENARY GUILDS,',
-      'AND THE VELON NEIGHBORHOOD COALITION.',
-      'THEY\'VE POOLED RESOURCES.',
+      'DELTA-9 TRANSIT: CONFIRMED.',
+      '',
+      'THE FREIGHTER IS A LIABILITY.',
+      'IT HAS THE STEALTH PROFILE OF',
+      'A BUILDING. THE GTA, TWO GUILDS,',
+      'AND THE VELON COALITION HAVE',
+      'TRIANGULATED YOUR POSITION.',
       '',
       'SOMEONE HERE IS RUNNING A BETTING',
       'POOL ON YOUR SURVIVAL. NOT SAYING',
       'WHO. CURRENT ODDS: 3 TO 1. AGAINST.',
       '',
-      '[1] DIRECT INTERCEPT',
-      '    HIGH UFO PRESENCE. MORE RISK.',
-      '    SHOW THEM YOU MEAN IT.  +50%.',
+      '[1] FORCE THROUGH',
+      '    THEY KNOW YOU\'RE COMING.',
+      '    MEET THEM HEAD ON.  +50%.',
       '',
-      '[2] STEALTH CORRIDOR',
-      '    REDUCED ENEMY PRESENCE.',
-      '    QUIETER. SUSPICIOUS.',
+      '[2] DARK CORRIDOR',
+      '    KILL THE TRANSPONDER.',
+      '    FEWER CONTACTS. YOU\'RE A GHOST.',
     ],
     profiles: [
       { gravMass: 1,   rockSpeed: 1,    diveFreq: 0.5, ufoFreq: 2.5, bonusMult: 1.5 },
@@ -331,7 +337,9 @@ interface GS {
   buckshot:        boolean;
   buckshotUsed:    boolean;
   pathChoices:     Partial<Record<number, 1 | 2>>;
-  missionKind:     'approach' | 'eliminate';
+  missionKind:     'approach' | 'transit';
+  missionT:        number;
+  spawnEnemyT:     number;
   stationProgress: number;
   dockSeq:         boolean;
   dockLock:        number;
@@ -392,6 +400,27 @@ const GTA_DRONE_SPR = [
   ' ##.## ',
 ];
 
+// Velon-4 Lagrange point arrival scene (wave 2 → 3 transition)
+const DEPOT_SPR = [
+  '   .   ',
+  '  [#]  ',
+  ' ##### ',
+  '#######',
+  '#.###.#',
+  '#######',
+  ' ## ## ',
+  '[#] [#]',
+];
+// Vertical gameplay sprite for the commandeered freighter (waves 3+). ~1.5× player size.
+const FREIGHTER_PLAY_SPR = [
+  '  [.]  ',
+  ' ##### ',
+  '#######',
+  '#.###.#',
+  '#######',
+  ' ## ## ',
+];
+
 function drawSpr(
   ctx: CanvasRenderingContext2D,
   spr: string[], color: string,
@@ -422,6 +451,10 @@ function eColor(kind: EK, row: number) {
 
 function eSpr(kind: EK) {
   return kind === 2 ? SPR.boss : kind === 1 ? SPR.alien : SPR.rock;
+}
+
+function playerSprite(wave: number): string[] {
+  return wave >= 3 ? FREIGHTER_PLAY_SPR : SPR.player;
 }
 
 function hit(
@@ -485,6 +518,31 @@ function buildWave(wave: number, profile: PhysicsProfile = DEFAULT_PROFILE): Ene
   return arr;
 }
 
+const TRANSIT_DURATION  = 60; // seconds per transit level
+const APPROACH_DURATION = 45; // seconds for Level 1 approach
+
+function mkEnemy(wave: number, profile: PhysicsProfile, id: number): Enemy {
+  const allMoves: EMove[] = ['drift', 'drift', 'sweep', 'swoop', 'chase'];
+  if (wave >= 4) allMoves.push('chase', 'swoop');
+  if (wave >= 6) allMoves.push('chase', 'chase');
+  const rng     = Math.random();
+  const kind: EK = rng < 0.12 + wave * 0.03 ? 2 : rng < 0.35 + wave * 0.02 ? 1 : 0;
+  const row     = kind === 2 ? 0 : kind === 1 ? 1 : Math.floor(Math.random() * 2) + 2;
+  const move    = allMoves[Math.floor(Math.random() * allMoves.length)];
+  const baseSpd = (42 + wave * 9 + Math.random() * 18) * profile.rockSpeed;
+  const x       = 16 + Math.random() * (W - 32);
+  let vx = 0, vy = baseSpd * 0.5;
+  if (move === 'drift') { vx = (Math.random() - 0.5) * baseSpd * 0.85; vy = baseSpd * (0.35 + Math.random() * 0.3); }
+  else if (move === 'swoop') { vx = (Math.random() > 0.5 ? 1 : -1) * baseSpd * 0.65; vy = baseSpd * 0.28; }
+  return {
+    id, kind, row, col: 0, x, y: -30, vx, vy, move, t: 0,
+    amp: 28 + Math.random() * 36, freq: 1.0 + Math.random() * 1.4, originX: x,
+    shootCD: 2 + Math.random() * 5,
+    pts:  kind === 2 ? 50  : kind === 1 ? 20 : 10,
+    dpts: kind === 2 ? 150 : kind === 1 ? 60 : 30,
+  };
+}
+
 function mkStars(): GS['stars'] {
   return Array.from({ length: 64 }, () => ({
     x: Math.random() * W, y: Math.random() * H,
@@ -518,9 +576,10 @@ function newGame(
   buckshotUsed = false,
   pathChoices: Partial<Record<number, 1 | 2>> = {},
   activePowerup: ActivePowerup | null = null,
+  fuel         = 1,
 ): GS {
   const enemies = buildWave(wave, profile);
-  return {
+  const gs: GS = {
     phase: 'play', score, hi, lives, wave,
     px: W / 2, invT: 2, shootT: 0,
     waveT: 0, dieT: 0,
@@ -534,7 +593,9 @@ function newGame(
     txLines: [], txLine: 0, txCh: 0, txDone: false, txWait: 0,
     txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0, txScroll: 0, paused: false,
     introT: 0, jumpT: 0, gravitySurgeTimer: 0, gravitySurgeActive: false, gravitySurgeWarn: false, gtaDroneLeft: false, gtaDroneHP: 3, gtaDroneShootT: 0, stickX: 0,
-    missionKind:     wave === 1 ? 'approach' : 'eliminate',
+    missionKind:     wave === 1 ? 'approach' : 'transit',
+    missionT:        0,
+    spawnEnemyT:     8 + Math.random() * 4,
     stationProgress: 0,
     dockSeq:         false,
     dockLock:        0,
@@ -542,7 +603,7 @@ function newGame(
     totalEnemies:    enemies.length,
     scoreLog:        [],
     activeProfile:   profile,
-    fuel:            1,
+    fuel,
     debrisParticles: [],
     buckshot:        false,
     buckshotUsed,
@@ -550,6 +611,20 @@ function newGame(
     powerupOffer:    null,
     activePowerup,
   };
+  if (profile.preDebris) {
+    for (let i = 0; i < profile.preDebris; i++) {
+      gs.debrisParticles.push({
+        id:      gs.seq++,
+        x:       20 + Math.random() * (W - 40),
+        y:       30 + Math.random() * (H * 0.75),
+        vx:      (Math.random() - 0.5) * 10,
+        vy:      5 + Math.random() * 10,
+        life:    0.35 + Math.random() * 0.55,
+        maxLife: 20 + Math.random() * 15,
+      });
+    }
+  }
+  return gs;
 }
 
 function logScore(gs: GS, label: string, pts: number) {
@@ -576,7 +651,7 @@ function pickPowerup(gs: GS, kind: PowerupKind) {
     gs.activePowerup = kind;
   }
   gs.powerupOffer = null;
-  if (gs.missionKind === 'eliminate') {
+  if (gs.missionKind === 'transit') {
     gs.phase = 'jump';
     gs.jumpT  = 0;
     gs.px     = W / 2;
@@ -678,7 +753,7 @@ function tickGravRocks(gs: GS, dt: number) {
     if (rock.x < -80 || rock.x > W + 80 || rock.y < -80 || rock.y > H + 80) return false;
 
     if (gs.invT <= 0) {
-      const pw = sprW(SPR.player), ph = sprH(SPR.player);
+      const pw = sprW(playerSprite(gs.wave)), ph = sprH(playerSprite(gs.wave));
       if (hit(rock.x, rock.y, rW, rH, gs.px, PY, pw, ph)) killPlayer(gs);
     }
 
@@ -779,7 +854,8 @@ const MAX_PLANETS = 3;
 
 function tickPlanets(gs: GS, dt: number) {
   gs.spawnPlanetT -= dt;
-  if (gs.spawnPlanetT <= 0 && gs.planets.length < MAX_PLANETS) {
+  const nearLagrange = gs.wave === 2 && gs.stationProgress >= 0.75;
+  if (gs.spawnPlanetT <= 0 && gs.planets.length < MAX_PLANETS && !nearLagrange) {
     gs.planets.push(mkPlanet(gs.seq++));
     gs.spawnPlanetT = 36 + Math.random() * 28;
   }
@@ -1045,14 +1121,39 @@ function update(gs: GS, dt: number) {
   gs.enemies = gs.enemies.filter(e => !killedEnemies.has(e.id));
   gs.bullets = gs.bullets.filter(b => !usedBullets.has(b.id));
 
-  /* ── station approach: progress mirrors enemy clearing ── */
-  if (gs.missionKind === 'approach' && !gs.dockSeq && gs.totalEnemies > 0) {
-    gs.stationProgress = 1 - gs.enemies.length / gs.totalEnemies;
+  /* ── mission progress ── */
+  if (gs.missionKind === 'approach' && !gs.dockSeq) {
+    gs.missionT        = (gs.missionT ?? 0) + dt;
+    gs.stationProgress = Math.min(1, gs.missionT / APPROACH_DURATION);
+    gs.spawnEnemyT -= dt;
+    if (gs.spawnEnemyT <= 0 && gs.stationProgress < 0.95) {
+      gs.enemies.push(mkEnemy(gs.wave, gs.activeProfile, gs.seq++));
+      gs.spawnEnemyT = 10 + Math.random() * 8;
+    }
+  }
+  if (gs.missionKind === 'transit') {
+    gs.missionT        = (gs.missionT ?? 0) + dt;
+    gs.stationProgress = Math.min(1, gs.missionT / TRANSIT_DURATION);
+
+    // Wave 2: evict planets in the final quarter — gravitational bodies
+    // would destabilise the Lagrange point and make the depot non-stationary.
+    if (gs.wave === 2 && gs.stationProgress >= 0.75 && gs.planets.length > 0) {
+      gs.planets = [];
+    }
+
+    // trickle in new enemies so the field never goes empty
+    gs.spawnEnemyT -= dt;
+    if (gs.spawnEnemyT <= 0 && gs.stationProgress < 0.95) {
+      const n = 1 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < n; i++)
+        gs.enemies.push(mkEnemy(gs.wave, gs.activeProfile, gs.seq++));
+      gs.spawnEnemyT = 6 + Math.random() * 6;
+    }
   }
 
   /* ── enemy bullets → player ── */
   if (gs.invT <= 0) {
-    const pw = sprW(SPR.player), ph = sprH(SPR.player);
+    const pw = sprW(playerSprite(gs.wave)), ph = sprH(playerSprite(gs.wave));
     for (const b of gs.bullets) {
       if (b.player) continue;
       if (hit(b.x, b.y, PX, PX * 2, gs.px, PY, pw, ph)) { killPlayer(gs); break; }
@@ -1061,7 +1162,7 @@ function update(gs: GS, dt: number) {
 
   /* ── enemies → player collision ── */
   if (gs.invT <= 0) {
-    const pw = sprW(SPR.player), ph = sprH(SPR.player);
+    const pw = sprW(playerSprite(gs.wave)), ph = sprH(playerSprite(gs.wave));
     for (let i = gs.enemies.length - 1; i >= 0; i--) {
       const e = gs.enemies[i];
       const sp = eSpr(e.kind);
@@ -1083,10 +1184,10 @@ function update(gs: GS, dt: number) {
     }
   });
 
-  /* ── docking sequence: trigger when all enemies cleared ── */
-  if (gs.missionKind === 'approach' && !gs.dockSeq && gs.enemies.length === 0) {
+  /* ── docking sequence: trigger when approach timer completes ── */
+  if (gs.missionKind === 'approach' && !gs.dockSeq && gs.stationProgress >= 1) {
     gs.dockSeq      = true;
-    gs.stationProgress = 1;
+    gs.enemies      = [];
     gs.bullets      = gs.bullets.filter(b => b.player);
     gs.planets      = [];
     gs.gravRocks    = [];
@@ -1111,7 +1212,7 @@ function update(gs: GS, dt: number) {
   /* ── wave clear ── */
   const waveClear = gs.missionKind === 'approach'
     ? gs.dockSeq && gs.dockAscent >= 1
-    : gs.enemies.length === 0;
+    : gs.stationProgress >= 1;
 
   if (waveClear && gs.waveT <= 0) {
     const wBonus = Math.round(gs.wave * 500 * gs.activeProfile.bonusMult);
@@ -1119,6 +1220,16 @@ function update(gs: GS, dt: number) {
     gs.hi     = Math.max(gs.hi, gs.score);
     logScore(gs, 'WAVE BONUS', wBonus);
     gs.waveT  = 2.5;
+    if (gs.missionKind === 'transit') {
+      gs.enemies         = [];
+      gs.gravRocks       = [];
+      gs.debrisParticles = [];
+      gs.ufo             = null;
+      gs.ufoT            = 999;
+      gs.spawnRockT      = 999;
+      gs.spawnEnemyT     = 999;
+      gs.spawnPlanetT    = 999;
+    }
   }
 
   if (!gs.dockSeq) {
@@ -1562,6 +1673,70 @@ function drawGTADrone(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
   ctx.textAlign   = 'left';
 }
 
+/* ── Velon-4 Lagrange point arrival scene ────────────────────────────── */
+function drawArrivalScene(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
+  if (gs.wave !== 2 || gs.waveT <= 0) return;
+
+  const elapsed  = 2.5 - gs.waveT;
+  const fadeIn   = Math.min(1, elapsed / 0.4);
+  const fadeOut  = Math.min(1, gs.waveT / 0.3);
+  const alpha    = fadeIn * fadeOut;
+  if (alpha <= 0) return;
+
+  const TINT = '#7a8899';
+
+  // Velon-4 — distant planet dot, upper-left (below HUD score row)
+  ctx.fillStyle   = '#5a9fd4';
+  ctx.globalAlpha = alpha * 0.65;
+  ctx.beginPath(); ctx.arc(72, 82, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = alpha * 0.18;
+  ctx.beginPath(); ctx.arc(72, 82, 20, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = alpha * 0.55;
+  ctx.font      = "13px 'VT323', monospace";
+  ctx.fillStyle = '#5a9fd4';
+  ctx.textAlign = 'left';
+  ctx.fillText('VELON-4', 85, 80);
+  ctx.globalAlpha = alpha * 0.30;
+  ctx.fillText('↑ 340,000 km', 85, 93);
+
+  // Fuel depot — enters from top, settles upper-right, gentle bob
+  const depotSlideT  = Math.min(1, elapsed / 1.5);
+  const depotEase    = 1 - Math.pow(1 - depotSlideT, 3);
+  const depotFinalY  = 148;
+  const depotY       = depotFinalY + (1 - depotEase) * (-depotFinalY - 30) + Math.sin(t * 0.4) * 2.5;
+  ctx.globalAlpha = alpha * depotEase * 0.72;
+  drawSpr(ctx, DEPOT_SPR, TINT, 310, depotY, 5);
+
+  // Freighter — enters from top slightly later, settles center, drifts
+  const slideT    = Math.min(1, elapsed / 2.2);
+  const slideEase = 1 - Math.pow(1 - slideT, 3);
+  const freighterFinalY = 218;
+  const freighterX = 210 + Math.sin(t * 0.26) * 1.5;
+  const freighterY = freighterFinalY + (1 - slideEase) * (-freighterFinalY - 20) + Math.cos(t * 0.21) * 2;
+  ctx.globalAlpha  = alpha * slideEase * 0.82;
+  drawSpr(ctx, FREIGHTER_PLAY_SPR, TINT, freighterX, freighterY, 4);
+
+  // Engine glow — cyan pulse, fades in once ship has settled
+  // FREIGHTER_PLAY_SPR bottom row ' ## ## ': cols 1-2 → freighterX-8, cols 4-5 → freighterX+4
+  if (slideEase > 0.5) {
+    const glowFade  = (slideEase - 0.5) / 0.5;
+    const glowPulse = 0.28 + 0.18 * Math.sin(t * 4.8);
+    const ex1 = freighterX - 8;
+    const ex2 = freighterX + 4;
+    const ey  = freighterY + 10;
+    ctx.fillStyle   = C.cyan;
+    ctx.globalAlpha = alpha * glowFade * glowPulse;
+    ctx.beginPath(); ctx.arc(ex1, ey, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ex2, ey, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = alpha * glowFade * glowPulse * 0.3;
+    ctx.beginPath(); ctx.arc(ex1, ey, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ex2, ey, 9, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.textAlign   = 'left';
+}
+
 /* ── render ──────────────────────────────────────────────────────────── */
 function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
   ctx.fillStyle = C.bg;
@@ -1579,6 +1754,41 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
         ctx.fillRect(Math.floor(x), Math.floor(y), s, s);
       }
     });
+    // Level 3: launch from Velon-4 Lagrange point depot in the commandeered freighter
+    if (gs.wave === 3) {
+      // Depot recedes off the bottom — you're leaving it behind
+      const driftDown  = gs.introT * 65;
+      const depotAlpha = Math.max(0, 1 - gs.introT / 1.4);
+      if (depotAlpha > 0) {
+        ctx.globalAlpha = depotAlpha * 0.75;
+        drawSpr(ctx, DEPOT_SPR, '#7a8899', W * 0.72, H - 85 + driftDown, 5);
+        ctx.globalAlpha = 1;
+      }
+
+      // Freighter rises from below screen — this is the player's ship now (cyan = yours)
+      const fSlide    = Math.min(1, gs.introT / 2.0);
+      const fEase     = 1 - Math.pow(1 - fSlide, 2);
+      const freighterY = (H - 110) + (1 - fEase) * 140;
+      const fAlpha     = Math.min(1, gs.introT * 2.5);
+      ctx.globalAlpha  = fAlpha * 0.88;
+      drawSpr(ctx, FREIGHTER_PLAY_SPR, C.cyan, gs.px, freighterY, 4);
+
+      // Engine glow pulses as freighter climbs
+      if (fSlide > 0.15) {
+        const glowFade  = Math.min(1, (fSlide - 0.15) / 0.35);
+        const glowPulse = 0.4 + 0.3 * Math.sin(gs.introT * 5.2);
+        const ex1 = gs.px - 8, ex2 = gs.px + 4, ey = freighterY + 10;
+        ctx.fillStyle   = C.cyan;
+        ctx.globalAlpha = fAlpha * glowFade * glowPulse * 0.65;
+        ctx.beginPath(); ctx.arc(ex1, ey, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex2, ey, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = fAlpha * glowFade * glowPulse * 0.2;
+        ctx.beginPath(); ctx.arc(ex1, ey, 12, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex2, ey, 12, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
     if (progress > 0.45) {
       const fadeIn      = Math.min(1, (progress - 0.45) / 0.3);
       ctx.globalAlpha   = fadeIn;
@@ -1604,13 +1814,13 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     });
     const jumpY = PY - progress * (PY + 50);
     if (jumpY > -24) {
-      drawSpr(ctx, SPR.player, C.cyan, gs.px, jumpY);
-      drawSpr(ctx, SPR.thruster, C.pink, gs.px, jumpY + sprH(SPR.player) / 2 + PX, PX);
+      drawSpr(ctx, playerSprite(gs.wave), C.cyan, gs.px, jumpY);
+      drawSpr(ctx, SPR.thruster, C.pink, gs.px, jumpY + sprH(playerSprite(gs.wave)) / 2 + PX, PX);
       const trailH = Math.floor(progress * 80);
       if (trailH > 0) {
         ctx.globalAlpha = 0.25 + 0.2 * progress;
         ctx.fillStyle   = C.pink;
-        ctx.fillRect(Math.floor(gs.px - 1), Math.floor(jumpY + sprH(SPR.player) / 2 + PX * 2), 2, trailH);
+        ctx.fillRect(Math.floor(gs.px - 1), Math.floor(jumpY + sprH(playerSprite(gs.wave)) / 2 + PX * 2), 2, trailH);
         ctx.globalAlpha = 1;
       }
     }
@@ -1703,9 +1913,10 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     const blink = gs.invT > 0 && Math.sin(t * 12) > 0;
     if (!blink) {
       const playerY = gs.dockAscent > 0 ? PY - (PY - 45) * gs.dockAscent : PY;
-      drawSpr(ctx, SPR.player, C.cyan, gs.px, playerY);
+      const pSpr = playerSprite(gs.wave);
+      drawSpr(ctx, pSpr, C.cyan, gs.px, playerY);
       if (gs.dockAscent > 0 || Math.sin(t * 22) > 0)
-        drawSpr(ctx, SPR.thruster, C.pink, gs.px, playerY + sprH(SPR.player) / 2 + PX, PX);
+        drawSpr(ctx, SPR.thruster, C.pink, gs.px, playerY + sprH(pSpr) / 2 + PX, PX);
     }
   }
 
@@ -1787,6 +1998,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     ctx.textAlign = 'left';
   }
 
+  drawArrivalScene(ctx, gs, t);
   drawHUD(ctx, gs, isTouch);
 
   if (gs.gravitySurgeActive || gs.gravitySurgeWarn) {
@@ -1836,10 +2048,8 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
 
   // mission progress
   if (gs.phase === 'play' || gs.phase === 'die') {
-    const pct    = gs.missionKind === 'approach'
-      ? Math.round(gs.stationProgress * 100)
-      : gs.totalEnemies > 0 ? Math.round((1 - gs.enemies.length / gs.totalEnemies) * 100) : 0;
-    const mLabel = gs.missionKind === 'approach' ? 'DOCK' : 'ELIM';
+    const pct    = Math.round(gs.stationProgress * 100);
+    const mLabel = gs.missionKind === 'approach' ? 'DOCK' : 'DIST';
 
     if (isTouch) {
       // visual progress bar replacing plain text on mobile
@@ -1960,14 +2170,18 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
 
   // wave clear / dock complete banner
   if (gs.waveT > 0) {
-    ctx.font      = "28px 'VT323', monospace";
     ctx.textAlign = 'center';
-    const label = gs.missionKind === 'approach' ? 'DOCK COMPLETE' : 'SECTOR CLEAR';
+    const label    = gs.missionKind === 'approach' ? 'DOCK COMPLETE' : 'ARRIVED';
+    const sublabel = gs.missionKind === 'approach' ? 'NEO-7' : sectorName(gs.wave);
+    ctx.font      = "28px 'VT323', monospace";
     ctx.fillStyle = C.green;
-    ctx.fillText(label, W / 2, H / 2 - 14);
+    ctx.fillText(label, W / 2, H / 2 - 20);
+    ctx.font      = "20px 'VT323', monospace";
+    ctx.fillStyle = C.cyan;
+    ctx.fillText(sublabel, W / 2, H / 2 + 2);
     ctx.font      = "18px 'VT323', monospace";
     ctx.fillStyle = C.amber;
-    ctx.fillText(`BONUS  +${Math.round(gs.wave * 500 * gs.activeProfile.bonusMult)}`, W / 2, H / 2 + 12);
+    ctx.fillText(`BONUS  +${Math.round(gs.wave * 500 * gs.activeProfile.bonusMult)}`, W / 2, H / 2 + 24);
     ctx.textAlign = 'left';
   }
 
@@ -1992,11 +2206,14 @@ function processCheat(gs: GS, raw: string): string {
     case 'SKIPWAVE':
     case 'NEXTWAVE':
     case 'ENDWAVE':
-      gs.enemies = [];
       if (gs.missionKind === 'approach') {
-        gs.dockSeq   = true;
-        gs.dockLock  = DOCK_HOLD_TIME;
+        gs.enemies    = [];
+        gs.dockSeq    = true;
+        gs.dockLock   = DOCK_HOLD_TIME;
         gs.dockAscent = 1;
+      } else {
+        gs.missionT        = TRANSIT_DURATION;
+        gs.stationProgress = 1;
       }
       return 'WAVE SKIPPED';
     case 'GODMODE':
@@ -2108,7 +2325,7 @@ export default function GameCanvas() {
             gs.phase  = 'intro';
             gs.introT = 0;
           } else {
-            const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile, gs.buckshotUsed, gs.pathChoices, gs.activePowerup);
+            const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile, gs.buckshotUsed, gs.pathChoices, gs.activePowerup, gs.fuel);
             ng.phase  = 'intro';
             ng.introT = 0;
             gsRef.current = ng;
@@ -2122,7 +2339,7 @@ export default function GameCanvas() {
           const choiceIdx = e.key === '1' ? 0 : 1;
           const choiceNum = (e.key === '1' ? 1 : 2) as 1 | 2;
           const profile   = gs.txProfiles[choiceIdx];
-          const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, profile, gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: choiceNum }, gs.activePowerup);
+          const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, profile, gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: choiceNum }, gs.activePowerup, gs.fuel);
           ng.phase  = 'intro';
           ng.introT = 0;
           gsRef.current = ng;
@@ -2319,7 +2536,7 @@ export default function GameCanvas() {
         }
         if (g.phase === 'brief' && g.txProfiles) {
           const choiceNum = zone as 1 | 2;
-          const ng = newGame(g.wave + 1, g.score, g.hi, g.lives, g.txProfiles[idx], g.buckshotUsed, { ...g.pathChoices, [g.wave + 1]: choiceNum }, g.activePowerup);
+          const ng = newGame(g.wave + 1, g.score, g.hi, g.lives, g.txProfiles[idx], g.buckshotUsed, { ...g.pathChoices, [g.wave + 1]: choiceNum }, g.activePowerup, g.fuel);
           ng.phase = 'intro'; ng.introT = 0;
           gsRef.current = ng;
         }
@@ -2510,9 +2727,7 @@ export default function GameCanvas() {
         const show = g.phase === 'play' || g.phase === 'die';
         sidebarRef.current.style.display = show ? 'flex' : 'none';
         if (show) {
-          const pct = g.missionKind === 'approach'
-            ? Math.round(g.stationProgress * 100)
-            : g.totalEnemies > 0 ? Math.round((1 - g.enemies.length / g.totalEnemies) * 100) : 0;
+          const pct = Math.round(g.stationProgress * 100);
           progressFillRef.current.style.height = `${pct}%`;
         }
       }
@@ -2524,10 +2739,8 @@ export default function GameCanvas() {
       if (deskWaveRef.current)  deskWaveRef.current.textContent  = String(g.wave);
       if (deskFuelRef.current)  deskFuelRef.current.textContent  = `${Math.round(g.fuel * 100)}%`;
       if (playing && deskMissionRef.current && deskPctRef.current && deskFillRef.current) {
-        const pct = g.missionKind === 'approach'
-          ? Math.round(g.stationProgress * 100)
-          : g.totalEnemies > 0 ? Math.round((1 - g.enemies.length / g.totalEnemies) * 100) : 0;
-        deskMissionRef.current.textContent = g.missionKind === 'approach' ? 'DOCK' : 'ELIMINATE';
+        const pct = Math.round(g.stationProgress * 100);
+        deskMissionRef.current.textContent = g.missionKind === 'approach' ? 'DOCK' : 'TRANSIT';
         deskPctRef.current.textContent     = `${pct}%`;
         deskFillRef.current.style.width    = `${pct}%`;
       }
@@ -2717,7 +2930,7 @@ export default function GameCanvas() {
                     gs.phase  = 'intro';
                     gs.introT = 0;
                   } else {
-                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile, gs.buckshotUsed, gs.pathChoices, gs.activePowerup);
+                    const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.activeProfile, gs.buckshotUsed, gs.pathChoices, gs.activePowerup, gs.fuel);
                     ng.phase  = 'intro';
                     ng.introT = 0;
                     gsRef.current = ng;
@@ -2766,7 +2979,7 @@ export default function GameCanvas() {
                   powerupChoicesRef.current[gs.wave] = kind;
                   pickPowerup(gs, kind);
                 } else if (gs.phase === 'brief' && gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                  const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 1 as const }, gs.activePowerup);
+                  const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[0], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 1 as const }, gs.activePowerup, gs.fuel);
                   ng.phase  = 'intro';
                   ng.introT = 0;
                   gsRef.current = ng;
@@ -2783,7 +2996,7 @@ export default function GameCanvas() {
                   powerupChoicesRef.current[gs.wave] = kind;
                   pickPowerup(gs, kind);
                 } else if (gs.phase === 'brief' && gs.txHasChoice && gs.txDone && gs.txProfiles) {
-                  const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 2 as const }, gs.activePowerup);
+                  const ng = newGame(gs.wave + 1, gs.score, gs.hi, gs.lives, gs.txProfiles[1], gs.buckshotUsed, { ...gs.pathChoices, [gs.wave + 1]: 2 as const }, gs.activePowerup, gs.fuel);
                   ng.phase  = 'intro';
                   ng.introT = 0;
                   gsRef.current = ng;
