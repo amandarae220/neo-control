@@ -150,28 +150,31 @@ const TRANSMISSIONS: WaveBrief[] = [
       'UPGRADED TO "ACTIVE PURSUIT."',
     ],
   },
-  { // wave 3 → wave 4: tactical choice
+  { // wave 3 → wave 4: freighter is a liability, tactical choice
     lines: [
-      '>>> NEO CONTROL  //  INTEL UPDATE',
+      '>>> NEO CONTROL  //  SITUATION UPDATE',
       '',
       'SPACE CADET.',
       '',
-      'FORMAL COMPLAINTS RECEIVED FROM',
-      'THE GTA, TWO MERCENARY GUILDS,',
-      'AND THE VELON NEIGHBORHOOD COALITION.',
-      'THEY\'VE POOLED RESOURCES.',
+      'DELTA-9 TRANSIT: CONFIRMED.',
+      '',
+      'THE FREIGHTER IS A LIABILITY.',
+      'IT HAS THE STEALTH PROFILE OF',
+      'A BUILDING. THE GTA, TWO GUILDS,',
+      'AND THE VELON COALITION HAVE',
+      'TRIANGULATED YOUR POSITION.',
       '',
       'SOMEONE HERE IS RUNNING A BETTING',
       'POOL ON YOUR SURVIVAL. NOT SAYING',
       'WHO. CURRENT ODDS: 3 TO 1. AGAINST.',
       '',
-      '[1] DIRECT INTERCEPT',
-      '    HIGH UFO PRESENCE. MORE RISK.',
-      '    SHOW THEM YOU MEAN IT.  +50%.',
+      '[1] FORCE THROUGH',
+      '    THEY KNOW YOU\'RE COMING.',
+      '    MEET THEM HEAD ON.  +50%.',
       '',
-      '[2] STEALTH CORRIDOR',
-      '    REDUCED ENEMY PRESENCE.',
-      '    QUIETER. SUSPICIOUS.',
+      '[2] DARK CORRIDOR',
+      '    KILL THE TRANSPONDER.',
+      '    FEWER CONTACTS. YOU\'RE A GHOST.',
     ],
     profiles: [
       { gravMass: 1,   rockSpeed: 1,    diveFreq: 0.5, ufoFreq: 2.5, bonusMult: 1.5 },
@@ -408,14 +411,14 @@ const DEPOT_SPR = [
   ' ## ## ',
   '[#] [#]',
 ];
-// Command pod on left (front), engines on right (back). Row 4 engine glows
-// at sprite col indices 16 and 19 → canvas offsets +22 and +34 at ps=4.
-const FREIGHTER_SPR = [
-  '  .                  ',
-  ' [#]#################',
-  '[###]################',
-  ' [#]#################',
-  '    ##       ##[.][.]',
+// Vertical gameplay sprite for the commandeered freighter (waves 3+). ~1.5× player size.
+const FREIGHTER_PLAY_SPR = [
+  '  [.]  ',
+  ' ##### ',
+  '#######',
+  '#.###.#',
+  '#######',
+  ' ## ## ',
 ];
 
 function drawSpr(
@@ -448,6 +451,10 @@ function eColor(kind: EK, row: number) {
 
 function eSpr(kind: EK) {
   return kind === 2 ? SPR.boss : kind === 1 ? SPR.alien : SPR.rock;
+}
+
+function playerSprite(wave: number): string[] {
+  return wave >= 3 ? FREIGHTER_PLAY_SPR : SPR.player;
 }
 
 function hit(
@@ -746,7 +753,7 @@ function tickGravRocks(gs: GS, dt: number) {
     if (rock.x < -80 || rock.x > W + 80 || rock.y < -80 || rock.y > H + 80) return false;
 
     if (gs.invT <= 0) {
-      const pw = sprW(SPR.player), ph = sprH(SPR.player);
+      const pw = sprW(playerSprite(gs.wave)), ph = sprH(playerSprite(gs.wave));
       if (hit(rock.x, rock.y, rW, rH, gs.px, PY, pw, ph)) killPlayer(gs);
     }
 
@@ -1146,7 +1153,7 @@ function update(gs: GS, dt: number) {
 
   /* ── enemy bullets → player ── */
   if (gs.invT <= 0) {
-    const pw = sprW(SPR.player), ph = sprH(SPR.player);
+    const pw = sprW(playerSprite(gs.wave)), ph = sprH(playerSprite(gs.wave));
     for (const b of gs.bullets) {
       if (b.player) continue;
       if (hit(b.x, b.y, PX, PX * 2, gs.px, PY, pw, ph)) { killPlayer(gs); break; }
@@ -1155,7 +1162,7 @@ function update(gs: GS, dt: number) {
 
   /* ── enemies → player collision ── */
   if (gs.invT <= 0) {
-    const pw = sprW(SPR.player), ph = sprH(SPR.player);
+    const pw = sprW(playerSprite(gs.wave)), ph = sprH(playerSprite(gs.wave));
     for (let i = gs.enemies.length - 1; i >= 0; i--) {
       const e = gs.enemies[i];
       const sp = eSpr(e.kind);
@@ -1700,24 +1707,23 @@ function drawArrivalScene(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
   ctx.globalAlpha = alpha * depotEase * 0.72;
   drawSpr(ctx, DEPOT_SPR, TINT, 310, depotY, 5);
 
-  // Freighter — enters from top slightly later, settles center-left, drifts
+  // Freighter — enters from top slightly later, settles center, drifts
   const slideT    = Math.min(1, elapsed / 2.2);
   const slideEase = 1 - Math.pow(1 - slideT, 3);
   const freighterFinalY = 218;
-  const freighterX = 185 + Math.sin(t * 0.26) * 1.5;
+  const freighterX = 210 + Math.sin(t * 0.26) * 1.5;
   const freighterY = freighterFinalY + (1 - slideEase) * (-freighterFinalY - 20) + Math.cos(t * 0.21) * 2;
   ctx.globalAlpha  = alpha * slideEase * 0.82;
-  drawSpr(ctx, FREIGHTER_SPR, TINT, freighterX, freighterY, 4);
+  drawSpr(ctx, FREIGHTER_PLAY_SPR, TINT, freighterX, freighterY, 4);
 
   // Engine glow — cyan pulse, fades in once ship has settled
+  // FREIGHTER_PLAY_SPR bottom row ' ## ## ': cols 1-2 → freighterX-8, cols 4-5 → freighterX+4
   if (slideEase > 0.5) {
     const glowFade  = (slideEase - 0.5) / 0.5;
     const glowPulse = 0.28 + 0.18 * Math.sin(t * 4.8);
-    // Dot chars at col indices 16 and 19 of FREIGHTER_SPR row 4,
-    // at ps=4 with maxC=21: offset = index*4 - 21*4/2 = index*4 - 42
-    const ex1 = freighterX + 22;  // 16*4 - 42
-    const ex2 = freighterX + 34;  // 19*4 - 42
-    const ey  = freighterY + 6;   // row 4 * ps=4, centered
+    const ex1 = freighterX - 8;
+    const ex2 = freighterX + 4;
+    const ey  = freighterY + 10;
     ctx.fillStyle   = C.cyan;
     ctx.globalAlpha = alpha * glowFade * glowPulse;
     ctx.beginPath(); ctx.arc(ex1, ey, 5, 0, Math.PI * 2); ctx.fill();
@@ -1748,6 +1754,41 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
         ctx.fillRect(Math.floor(x), Math.floor(y), s, s);
       }
     });
+    // Level 3: launch from Velon-4 Lagrange point depot in the commandeered freighter
+    if (gs.wave === 3) {
+      // Depot recedes off the bottom — you're leaving it behind
+      const driftDown  = gs.introT * 65;
+      const depotAlpha = Math.max(0, 1 - gs.introT / 1.4);
+      if (depotAlpha > 0) {
+        ctx.globalAlpha = depotAlpha * 0.75;
+        drawSpr(ctx, DEPOT_SPR, '#7a8899', W * 0.72, H - 85 + driftDown, 5);
+        ctx.globalAlpha = 1;
+      }
+
+      // Freighter rises from below screen — this is the player's ship now (cyan = yours)
+      const fSlide    = Math.min(1, gs.introT / 2.0);
+      const fEase     = 1 - Math.pow(1 - fSlide, 2);
+      const freighterY = (H - 110) + (1 - fEase) * 140;
+      const fAlpha     = Math.min(1, gs.introT * 2.5);
+      ctx.globalAlpha  = fAlpha * 0.88;
+      drawSpr(ctx, FREIGHTER_PLAY_SPR, C.cyan, gs.px, freighterY, 4);
+
+      // Engine glow pulses as freighter climbs
+      if (fSlide > 0.15) {
+        const glowFade  = Math.min(1, (fSlide - 0.15) / 0.35);
+        const glowPulse = 0.4 + 0.3 * Math.sin(gs.introT * 5.2);
+        const ex1 = gs.px - 8, ex2 = gs.px + 4, ey = freighterY + 10;
+        ctx.fillStyle   = C.cyan;
+        ctx.globalAlpha = fAlpha * glowFade * glowPulse * 0.65;
+        ctx.beginPath(); ctx.arc(ex1, ey, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex2, ey, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = fAlpha * glowFade * glowPulse * 0.2;
+        ctx.beginPath(); ctx.arc(ex1, ey, 12, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex2, ey, 12, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
     if (progress > 0.45) {
       const fadeIn      = Math.min(1, (progress - 0.45) / 0.3);
       ctx.globalAlpha   = fadeIn;
@@ -1773,13 +1814,13 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     });
     const jumpY = PY - progress * (PY + 50);
     if (jumpY > -24) {
-      drawSpr(ctx, SPR.player, C.cyan, gs.px, jumpY);
-      drawSpr(ctx, SPR.thruster, C.pink, gs.px, jumpY + sprH(SPR.player) / 2 + PX, PX);
+      drawSpr(ctx, playerSprite(gs.wave), C.cyan, gs.px, jumpY);
+      drawSpr(ctx, SPR.thruster, C.pink, gs.px, jumpY + sprH(playerSprite(gs.wave)) / 2 + PX, PX);
       const trailH = Math.floor(progress * 80);
       if (trailH > 0) {
         ctx.globalAlpha = 0.25 + 0.2 * progress;
         ctx.fillStyle   = C.pink;
-        ctx.fillRect(Math.floor(gs.px - 1), Math.floor(jumpY + sprH(SPR.player) / 2 + PX * 2), 2, trailH);
+        ctx.fillRect(Math.floor(gs.px - 1), Math.floor(jumpY + sprH(playerSprite(gs.wave)) / 2 + PX * 2), 2, trailH);
         ctx.globalAlpha = 1;
       }
     }
@@ -1872,9 +1913,10 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     const blink = gs.invT > 0 && Math.sin(t * 12) > 0;
     if (!blink) {
       const playerY = gs.dockAscent > 0 ? PY - (PY - 45) * gs.dockAscent : PY;
-      drawSpr(ctx, SPR.player, C.cyan, gs.px, playerY);
+      const pSpr = playerSprite(gs.wave);
+      drawSpr(ctx, pSpr, C.cyan, gs.px, playerY);
       if (gs.dockAscent > 0 || Math.sin(t * 22) > 0)
-        drawSpr(ctx, SPR.thruster, C.pink, gs.px, playerY + sprH(SPR.player) / 2 + PX, PX);
+        drawSpr(ctx, SPR.thruster, C.pink, gs.px, playerY + sprH(pSpr) / 2 + PX, PX);
     }
   }
 
