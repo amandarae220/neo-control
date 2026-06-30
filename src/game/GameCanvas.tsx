@@ -73,20 +73,36 @@ interface WaveBrief {
 const INTRO_TRANSMISSION: string[] = [
   '>>> NEO CONTROL  //  INCOMING TRANSMISSION',
   '',
-  'SPACE CADET. THIS IS NEO CONTROL.',
+  'SPACE CADET.',
   '',
-  'TODAY\'S OBJECTIVE: ROUTINE SUPPLY RUN TO NEO-7.',
-  'AUTOPILOT IS BROKEN AND YOU ARE ONE OF THE FEW WHO PASSED',
-  'THE MANUAL FLIGHT EXAMINATION (BARELY).',
+  'SUPPLY RUN TO NEO-7.',
+  'FORTY-FIVE MINUTES. ROUTINE.',
   '',
-  'REMEMBER: FUEL IS LIMITED. KEEP AN EYE ON THE FUEL GAUGE.',
-  'DEBRIS COLLECTION WILL TOP OFF FUEL LEVELS (REFER TO',
-  'FUEL MANAGEMENT TRAINING). DO NOT IGNORE THE GAUGE.',
+  'WE HAVE LOGGED YOUR MISSION.',
+  'ALSO YOUR INCIDENT REPORT.',
+  'STANDARD PRACTICE.',
   '',
-  'NEO-7 IS DIRECTLY AHEAD. DO NOT HIT IT. IT IS LARGE.',
-  'YOU ARE SMALL. ANY DAMAGE WILL BE DOCKED FROM YOUR PAY.',
+  'YOU WERE CALL NUMBER ELEVEN.',
+  'CALLS ONE THROUGH TEN DID NOT ANSWER.',
+  'WE HAVE NOTED THIS FOR HR.',
   '',
-  'GOOD LUCK. MISSION CONTROL OUT.',
+  'FUEL DRAINS ON THRUST. DEBRIS REFUELS.',
+  'GAUGE IS BOTTOM LEFT.',
+  'THIS IS NOT A METAPHOR.',
+  '',
+  'NEO-7 IS DIRECTLY AHEAD.',
+  'DO NOT HIT IT. IT IS LARGE.',
+  'YOU ARE SMALL. THIS SHOULD BE SIMPLE.',
+  'DAMAGE DOCKED FROM YOUR PAY.',
+  '',
+  'CURRENT OFFICE ODDS: 6 TO 1 AGAINST.',
+  'THE DEPARTMENT HEAD HAS TAKEN THE UNDER.',
+  'BETTING POOL CLOSES AT WAVE TWO.',
+  '',
+  'NOBODY HERE IS ROOTING AGAINST YOU.',
+  '(THE RECORDS WILL SHOW NOBODY SAID THAT.)',
+  '',
+  'MISSION CONTROL OUT.',
 ];
 
 const TRANSMISSIONS: WaveBrief[] = [
@@ -344,6 +360,7 @@ interface GS {
   activeProfile:   PhysicsProfile;
   powerupOffer:    [PowerupKind, PowerupKind] | null;
   activePowerup:   ActivePowerup | null;
+  deathLog:        { wave: number; x: number; progress: number }[];
 }
 
 interface ScoreEvent {
@@ -605,6 +622,7 @@ function newGame(
     pathChoices,
     powerupOffer:    null,
     activePowerup,
+    deathLog:        [],
   };
   if (profile.preDebris) {
     for (let i = 0; i < profile.preDebris; i++) {
@@ -935,6 +953,7 @@ function killPlayer(gs: GS) {
     burst(gs, gs.px, PY, C.amber, 8);
     return;
   }
+  gs.deathLog.push({ wave: gs.wave, x: Math.round(gs.px), progress: gs.stationProgress });
   burst(gs, gs.px, PY, C.cyan, 12);
   gs.bullets = gs.bullets.filter(b => b.player);
   gs.lives--;
@@ -1060,7 +1079,7 @@ function update(gs: GS, dt: number) {
 
   /* ── player move ── */
   gs.invT = Math.max(0, gs.invT - dt);
-  if (gs.dockAscent <= 0) {
+  if (gs.dockAscent <= 0 && gs.fuel > 0) {
     if (gs.keys.has('ArrowLeft')  || gs.keys.has('a')) gs.px = Math.max(14, gs.px - P_SPD * dt);
     if (gs.keys.has('ArrowRight') || gs.keys.has('d')) gs.px = Math.min(W - 14, gs.px + P_SPD * dt);
     if (Math.abs(gs.stickX) > 0.08)
@@ -1995,7 +2014,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   }
 
   drawArrivalScene(ctx, gs, t);
-  drawHUD(ctx, gs, isTouch);
+  drawHUD(ctx, gs, isTouch, t);
 
   if (gs.gravitySurgeActive || gs.gravitySurgeWarn) {
     const pulse   = 0.65 + 0.35 * Math.sin(t * (gs.gravitySurgeActive ? 10 : 4));
@@ -2027,7 +2046,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   }
 }
 
-function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
+function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false, t = 0) {
   const edge = isTouch ? 80 : 110;
 
   // Dark gradient strips so HUD text doesn't fight stars/particles/glow effects
@@ -2091,8 +2110,10 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
     const F_ANG   = 11 * Math.PI / 6;  // upper-right (2 o'clock)
     const gcx     = 42;
     const gcy     = isTouch ? H - 82 : H - 48;
+    const fuelLow = gs.fuel < 1 / 3;
     const fuelClr = gs.fuel > 0.5 ? C.green : gs.fuel > 0.25 ? C.amber : C.red;
     const nAngle  = E_ANG + gs.fuel * (F_ANG - E_ANG);
+    const blinkOn = !fuelLow || Math.sin(t * 9) > 0;
 
     ctx.lineCap = 'round';
 
@@ -2104,7 +2125,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
     ctx.stroke();
 
     // filled arc (E → current level)
-    if (gs.fuel > 0.01) {
+    if (gs.fuel > 0.01 && blinkOn) {
       ctx.strokeStyle = fuelClr;
       ctx.globalAlpha = 0.85;
       ctx.beginPath();
@@ -2114,7 +2135,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
     }
 
     // needle
-    ctx.strokeStyle = fuelClr;
+    ctx.strokeStyle = blinkOn ? fuelClr : 'rgba(200,192,218,0.15)';
     ctx.lineWidth   = 1.5;
     ctx.beginPath();
     ctx.moveTo(gcx, gcy);
@@ -2729,6 +2750,7 @@ export default function GameCanvas() {
           powerup_choices:  Object.fromEntries(
             Object.entries(powerupChoicesRef.current).map(([w, k]) => [w, k])
           ),
+          deaths:           g.deathLog,
         });
       }
       if (prevPhase === 'over' && g.phase !== 'over') {

@@ -1023,6 +1023,89 @@ function Stat({ label, value, icon, accent = 'var(--cyan)', tooltip }: {
 
 // ── chart card ───────────────────────────────────────────────────────────────
 
+function DeathHeatmap({ sessions }: { sessions: SessionRow[] }) {
+  const WAVES = 6;
+  const COLS  = 14;
+  const CELL_W = 30;
+  const CELL_H = 30;
+  const LEFT   = 28;
+  const BOT    = 18;
+  const svgW   = LEFT + COLS * CELL_W;
+  const svgH   = WAVES * CELL_H + BOT;
+
+  const grid: number[][] = Array.from({ length: WAVES }, () => Array(COLS).fill(0));
+  let maxVal = 0;
+
+  sessions.forEach(s => {
+    (s.deaths ?? []).forEach(d => {
+      const wi = d.wave - 1;
+      if (wi < 0 || wi >= WAVES) return;
+      const ci = Math.min(COLS - 1, Math.floor((d.x / 420) * COLS));
+      grid[wi][ci]++;
+      if (grid[wi][ci] > maxVal) maxVal = grid[wi][ci];
+    });
+  });
+
+  const totalDeaths = sessions.reduce((acc, s) => acc + (s.deaths?.length ?? 0), 0);
+
+  if (maxVal === 0) {
+    return <p style={{ color: 'var(--muted)', fontSize: 13, margin: '8px 0 0' }}>No death data yet — play data will appear after game-over sessions are submitted.</p>;
+  }
+
+  return (
+    <>
+      <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 10px', letterSpacing: '0.04em' }}>
+        {totalDeaths} deaths across {sessions.filter(s => s.deaths?.length).length} sessions · brighter = more deaths
+      </p>
+      <svg
+        width="100%"
+        viewBox={`0 0 ${svgW} ${svgH}`}
+        style={{ display: 'block', overflow: 'visible' }}
+        aria-label="Death heatmap by wave and player X position"
+      >
+        {Array.from({ length: WAVES }, (_, wi) => (
+          <text key={wi} x={LEFT - 5} y={wi * CELL_H + CELL_H * 0.64} textAnchor="end" fill="var(--muted)" fontSize={9} fontFamily="monospace">
+            W{wi + 1}
+          </text>
+        ))}
+
+        {Array.from({ length: WAVES }, (_, wi) =>
+          Array.from({ length: COLS }, (_, ci) => {
+            const count = grid[wi][ci];
+            const intensity = count / maxVal;
+            const alpha = intensity < 0.01 ? 0.05 : 0.12 + intensity * 0.88;
+            const x0 = Math.round((ci / COLS) * 420);
+            const x1 = Math.round(((ci + 1) / COLS) * 420);
+            return (
+              <rect
+                key={`${wi}-${ci}`}
+                x={LEFT + ci * CELL_W}
+                y={wi * CELL_H}
+                width={CELL_W - 1}
+                height={CELL_H - 1}
+                fill={`rgba(255, 72, 128, ${alpha.toFixed(3)})`}
+                rx={2}
+                role="img"
+                aria-label={`Wave ${wi + 1}, X ${x0}–${x1}px: ${count} deaths`}
+              />
+            );
+          })
+        )}
+
+        {[0, 0.25, 0.5, 0.75, 1].map((frac, i) => (
+          <text key={i} x={LEFT + frac * COLS * CELL_W} y={WAVES * CELL_H + 13} textAnchor="middle" fill="var(--muted)" fontSize={8} fontFamily="monospace">
+            {Math.round(frac * 420)}
+          </text>
+        ))}
+
+        <text x={LEFT + (COLS * CELL_W) / 2} y={svgH} textAnchor="middle" fill="var(--muted)" fontSize={8} fontFamily="monospace">
+          ← X position (px) →
+        </text>
+      </svg>
+    </>
+  );
+}
+
 function ChartCard({ title, children, color = 'var(--cyan)', wide = false }: {
   title: string;
   children: React.ReactNode;
@@ -1331,6 +1414,10 @@ export default function AdminPage() {
         ))}
 
         <PlayerProgressionCard sessions={filteredSessions}/>
+
+        <ChartCard title="Death Heatmap" color="var(--pink)" wide>
+          <DeathHeatmap sessions={filteredSessions}/>
+        </ChartCard>
 
         <ChartCard title="Path Score Flowchart" color="var(--cyan)" wide>
           <PathFlowChart sessions={filteredSessions}/>

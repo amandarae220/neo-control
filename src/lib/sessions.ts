@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
 
+export type DeathEvent = { wave: number; x: number; progress: number };
+
 export type SessionRow = {
   id?:               string;
   player_id:         string;
@@ -12,6 +14,7 @@ export type SessionRow = {
   path_choices?:     Record<string, 1 | 2>;
   pause_used?:       boolean;
   powerup_choices?:  Record<string, string>;
+  deaths?:           DeathEvent[];
   created_at?:       string;
 };
 
