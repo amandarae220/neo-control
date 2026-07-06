@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchSessions, type SessionRow } from '../lib/sessions';
-
-const PASS = import.meta.env.VITE_ADMIN_PASS as string | undefined;
+import { supabase } from '../lib/supabase';
 
 // ── icons ────────────────────────────────────────────────────────────────────
 
@@ -1125,7 +1124,8 @@ function ChartCard({ title, children, color = 'var(--cyan)', wide = false }: {
 type TimeFilter = 'all' | '24h' | '7d' | '30d';
 
 export default function AdminPage() {
-  const [input,         setInput]         = useState('');
+  const [email,         setEmail]         = useState('');
+  const [password,      setPassword]      = useState('');
   const [authed,        setAuthed]        = useState(false);
   const [sessions,      setSessions]      = useState<SessionRow[]>([]);
   const [error,         setError]         = useState<string | null>(null);
@@ -1145,11 +1145,29 @@ export default function AdminPage() {
     });
   };
 
-  const attempt = () => {
-    if (!PASS) { setError('VITE_ADMIN_PASS is not set.'); return; }
-    if (input.trim() === PASS) setAuthed(true);
-    else setError('WRONG PASSPHRASE');
+  const signIn = async () => {
+    if (!supabase) { setError('No database connection.'); return; }
+    setError(null);
+    const { error: authErr } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (authErr) { setError(authErr.message); return; }
+    setAuthed(true);
   };
+
+  const signOut = async () => {
+    if (supabase) await supabase.auth.signOut();
+    setAuthed(false);
+    setEmail('');
+    setPassword('');
+    setSessions([]);
+  };
+
+  // restore session on page reload
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) setAuthed(true);
+    });
+  }, []);
 
   useEffect(() => {
     if (authed) load();
@@ -1160,19 +1178,31 @@ export default function AdminPage() {
       <main className="page-shell admin-gate">
         <p className="eyebrow">NEO Control</p>
         <h1>Admin</h1>
-        <div className="admin-auth-row">
+        <div className="admin-auth-col">
           <input
             className="cheat-input"
-            type="password"
-            placeholder="PASSPHRASE"
-            value={input}
-            onChange={e => { setInput(e.target.value); setError(null); }}
-            onKeyDown={e => e.key === 'Enter' && attempt()}
-            aria-label="Admin passphrase"
+            type="email"
+            placeholder="EMAIL"
+            value={email}
+            onChange={e => { setEmail(e.target.value); setError(null); }}
+            onKeyDown={e => e.key === 'Enter' && signIn()}
+            aria-label="Admin email"
             aria-describedby={error ? 'admin-auth-error' : undefined}
             autoFocus
           />
-          <button className="primary-action compact" onClick={attempt}>ENTER</button>
+          <div className="admin-auth-row">
+            <input
+              className="cheat-input"
+              type="password"
+              placeholder="PASSWORD"
+              value={password}
+              onChange={e => { setPassword(e.target.value); setError(null); }}
+              onKeyDown={e => e.key === 'Enter' && signIn()}
+              aria-label="Admin password"
+              aria-describedby={error ? 'admin-auth-error' : undefined}
+            />
+            <button className="primary-action compact" onClick={signIn}>ENTER</button>
+          </div>
         </div>
         {error && <p id="admin-auth-error" role="alert" className="admin-error">{error}</p>}
       </main>
@@ -1266,14 +1296,23 @@ export default function AdminPage() {
       <p className="eyebrow">NEO Control · Admin</p>
       <div className="admin-header-row">
         <h1>Player Analytics</h1>
-        <button
-          className="secondary-action compact"
-          onClick={load}
-          disabled={loading}
-          aria-label="Refresh analytics data"
-        >
-          {loading ? 'REFRESHING…' : '↻ REFRESH'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="secondary-action compact"
+            onClick={load}
+            disabled={loading}
+            aria-label="Refresh analytics data"
+          >
+            {loading ? 'REFRESHING…' : '↻ REFRESH'}
+          </button>
+          <button
+            className="secondary-action compact"
+            onClick={signOut}
+            aria-label="Sign out"
+          >
+            SIGN OUT
+          </button>
+        </div>
       </div>
       <p className="admin-meta">
         <strong style={{ color: 'var(--heading)' }}>{n}</strong>
