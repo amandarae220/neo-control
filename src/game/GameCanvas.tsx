@@ -73,24 +73,36 @@ interface WaveBrief {
 const INTRO_TRANSMISSION: string[] = [
   '>>> NEO CONTROL  //  INCOMING TRANSMISSION',
   '',
-  'SPACE CADET. THIS IS NEO CONTROL.',
+  'SPACE CADET.',
   '',
-  'TODAY\'S OBJECTIVE: ROUTINE SUPPLY RUN TO NEO-7.',
-  'THE AUTOPILOT IS BROKEN.',
-  'YOU WERE THE ONLY ONE WHO PICKED UP',
-  'THE PHONE.',
+  'SUPPLY RUN TO NEO-7.',
+  'FORTY-FIVE MINUTES. ROUTINE.',
   '',
-  'YOUR SHIP IS SMALL. FUEL IS LIMITED.',
-  'WATCH THE GAUGE. DEBRIS IN THE FIELD',
-  'WILL TOP IT UP. DO NOT IGNORE',
-  'THE GAUGE.',
+  'WE HAVE LOGGED YOUR MISSION.',
+  'ALSO YOUR INCIDENT REPORT.',
+  'STANDARD PRACTICE.',
   '',
-  'THE STATION IS DIRECTLY AHEAD.',
-  'PLEASE DO NOT HIT IT. DAMAGE DONE',
-  'TO THE DOCK WILL BE DEDUCTED FROM',
-  'YOUR PAY.',
+  'YOU WERE CALL NUMBER ELEVEN.',
+  'CALLS ONE THROUGH TEN DID NOT ANSWER.',
+  'WE HAVE NOTED THIS FOR HR.',
   '',
-  'GOOD LUCK. MISSION CONTROL OUT.',
+  'FUEL DRAINS ON THRUST. DEBRIS REFUELS.',
+  'GAUGE IS BOTTOM LEFT.',
+  'THIS IS NOT A METAPHOR.',
+  '',
+  'NEO-7 IS DIRECTLY AHEAD.',
+  'DO NOT HIT IT. IT IS LARGE.',
+  'YOU ARE SMALL. THIS SHOULD BE SIMPLE.',
+  'DAMAGE DOCKED FROM YOUR PAY.',
+  '',
+  'CURRENT OFFICE ODDS: 6 TO 1 AGAINST.',
+  'THE DEPARTMENT HEAD HAS TAKEN THE UNDER.',
+  'BETTING POOL CLOSES AT WAVE TWO.',
+  '',
+  'NOBODY HERE IS ROOTING AGAINST YOU.',
+  '(THE RECORDS WILL SHOW NOBODY SAID THAT.)',
+  '',
+  'MISSION CONTROL OUT.',
 ];
 
 const TRANSMISSIONS: WaveBrief[] = [
@@ -101,12 +113,11 @@ const TRANSMISSIONS: WaveBrief[] = [
       'SPACE CADET.',
       '',
       'NEO-7 DOCK: CONFIRMED.',
-      'THOSE DRONES YOU SHOT DOWN ON APPROACH',
-      'WERE GALACTIC TRANSIT AUTHORITY.',
-      'ALL ELEVEN. ON RECORD.',
-      'THERE IS NOW A WARRANT.',
+      'THOSE DRONES YOU SHOT DOWN ON APPROACH WERE GALACTIC',
+      'TRANSIT AUTHORITY. ALL FIVE. ON RECORD. THERE IS A',
+      'WARRANT OUT FOR YOU.',
       '',
-      'CHECK YOUR GAUGE BEFORE YOU CHOOSE.',
+      'PICK AN ESCAPE ROUTE. CHECK YOUR GAUGE BEFORE YOU CHOOSE.',
       '',
       '[1] DEBRIS FIELD',
       '    SLOW ROCKS. LOW GRAVITY.',
@@ -349,6 +360,7 @@ interface GS {
   activeProfile:   PhysicsProfile;
   powerupOffer:    [PowerupKind, PowerupKind] | null;
   activePowerup:   ActivePowerup | null;
+  deathLog:        { wave: number; x: number; progress: number }[];
 }
 
 interface ScoreEvent {
@@ -610,6 +622,7 @@ function newGame(
     pathChoices,
     powerupOffer:    null,
     activePowerup,
+    deathLog:        [],
   };
   if (profile.preDebris) {
     for (let i = 0; i < profile.preDebris; i++) {
@@ -940,6 +953,7 @@ function killPlayer(gs: GS) {
     burst(gs, gs.px, PY, C.amber, 8);
     return;
   }
+  gs.deathLog.push({ wave: gs.wave, x: Math.round(gs.px), progress: gs.stationProgress });
   burst(gs, gs.px, PY, C.cyan, 12);
   gs.bullets = gs.bullets.filter(b => b.player);
   gs.lives--;
@@ -1065,7 +1079,7 @@ function update(gs: GS, dt: number) {
 
   /* ── player move ── */
   gs.invT = Math.max(0, gs.invT - dt);
-  if (gs.dockAscent <= 0) {
+  if (gs.dockAscent <= 0 && gs.fuel > 0) {
     if (gs.keys.has('ArrowLeft')  || gs.keys.has('a')) gs.px = Math.max(14, gs.px - P_SPD * dt);
     if (gs.keys.has('ArrowRight') || gs.keys.has('d')) gs.px = Math.min(W - 14, gs.px + P_SPD * dt);
     if (Math.abs(gs.stickX) > 0.08)
@@ -1392,7 +1406,7 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
     : gs.txHasChoice
       ? '── COMMAND DECISION REQUIRED ──'
       : '── INCOMING TRANSMISSION ──';
-  ctx.font      = "15px 'VT323', monospace";
+  ctx.font      = "17px 'VT323', monospace";
   ctx.textAlign = 'center';
   ctx.fillStyle = gs.txHasChoice ? C.amber : C.muted;
   ctx.fillText(header, W / 2, TX_TOP + 16);
@@ -1416,7 +1430,7 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
   ctx.rect(TX_PAD + 1, clipTop, bw - 2, clipH);
   ctx.clip();
 
-  ctx.font      = "15px 'VT323', monospace";
+  ctx.font      = "17px 'VT323', monospace";
   ctx.textAlign = 'left';
   for (let i = 0; i < gs.txLines.length; i++) {
     if (i > gs.txLine) break;
@@ -1463,7 +1477,7 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
     ctx.lineWidth   = 1;
     ctx.strokeRect(arrowX, arrowY + 2, arrowW, arrowH - 4);
     ctx.fillStyle   = C.amber;
-    ctx.font        = "15px 'VT323', monospace";
+    ctx.font        = "17px 'VT323', monospace";
     ctx.textAlign   = 'center';
     ctx.fillText('MORE  ↓', W / 2, arrowY + arrowH - 7);
     ctx.globalAlpha = 1;
@@ -1475,7 +1489,7 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
   ctx.fillRect(TX_PAD + 1, footerTop, bw - 2, TX_FOOTER);
 
   const btnBottom = TX_TOP + bh - 8;
-  ctx.font      = "15px 'VT323', monospace";
+  ctx.font      = "17px 'VT323', monospace";
   ctx.textAlign = 'center';
   ctx.lineWidth = 1;
 
@@ -1536,7 +1550,7 @@ function drawPowerup(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: 
   ctx.lineWidth   = 1;
   ctx.strokeRect(TX_PAD, TX_TOP, bw, bh);
 
-  ctx.font      = "15px 'VT323', monospace";
+  ctx.font      = "17px 'VT323', monospace";
   ctx.textAlign = 'center';
   ctx.fillStyle = C.cyan;
   ctx.fillText('── POWER UP ──', W / 2, TX_TOP + 16);
@@ -1547,10 +1561,10 @@ function drawPowerup(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: 
   ctx.lineTo(TX_PAD + bw - 6, TX_TOP + 22);
   ctx.stroke();
 
-  ctx.font      = "15px 'VT323', monospace";
+  ctx.font      = "17px 'VT323', monospace";
   ctx.fillStyle = C.muted;
   ctx.fillText('CHOOSE YOUR ADVANTAGE', W / 2, TX_TOP + 44);
-  ctx.font      = "13px 'VT323', monospace";
+  ctx.font      = "15px 'VT323', monospace";
   ctx.fillStyle = 'rgba(122,112,136,0.5)';
   ctx.fillText('ACTIVE DURING NEXT WAVE', W / 2, TX_TOP + 62);
 
@@ -1565,10 +1579,10 @@ function drawPowerup(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: 
     const lx     = TX_PAD + 14;
 
     ctx.textAlign = 'left';
-    ctx.font      = "17px 'VT323', monospace";
+    ctx.font      = "19px 'VT323', monospace";
     ctx.fillStyle = col;
     ctx.fillText(`[${num}]  ${info.label}`, lx, oy);
-    ctx.font      = "13px 'VT323', monospace";
+    ctx.font      = "15px 'VT323', monospace";
     ctx.fillStyle = maxed ? 'rgba(122,112,136,0.35)' : C.muted;
     ctx.fillText(`       ${desc}`, lx, oy + 18);
 
@@ -1576,7 +1590,7 @@ function drawPowerup(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: 
       ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 4);
       ctx.fillStyle   = col;
       ctx.textAlign   = 'right';
-      ctx.font        = "20px 'VT323', monospace";
+      ctx.font        = "22px 'VT323', monospace";
       ctx.fillText(`[ ${num} ]`, TX_PAD + bw - 10, oy + 2);
       ctx.globalAlpha = 1;
     }
@@ -1591,7 +1605,7 @@ function drawPowerup(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: 
   ctx.fillRect(TX_PAD + 1, footerTop, bw - 2, TX_FOOTER);
 
   if (!isTouch) {
-    ctx.font      = "15px 'VT323', monospace";
+    ctx.font      = "17px 'VT323', monospace";
     ctx.textAlign = 'center';
     ctx.fillStyle = C.muted;
     ctx.fillText('PRESS 1 OR 2 TO SELECT', W / 2, footerTop + 28);
@@ -1665,7 +1679,7 @@ function drawGTADrone(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
 
   // label
   ctx.textAlign   = 'center';
-  ctx.font        = "13px 'VT323', monospace";
+  ctx.font        = "15px 'VT323', monospace";
   ctx.fillStyle   = color;
   ctx.globalAlpha = gs.gravitySurgeActive ? 0.88 : 0.55;
   ctx.fillText('GTA-7', droneX, DRONE_Y + sprH(GTA_DRONE_SPR, PX + 1) / 2 + 11);
@@ -1692,7 +1706,7 @@ function drawArrivalScene(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
   ctx.globalAlpha = alpha * 0.18;
   ctx.beginPath(); ctx.arc(72, 82, 20, 0, Math.PI * 2); ctx.fill();
   ctx.globalAlpha = alpha * 0.55;
-  ctx.font      = "13px 'VT323', monospace";
+  ctx.font      = "15px 'VT323', monospace";
   ctx.fillStyle = '#5a9fd4';
   ctx.textAlign = 'left';
   ctx.fillText('VELON-4', 85, 80);
@@ -1739,6 +1753,7 @@ function drawArrivalScene(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
 
 /* ── render ──────────────────────────────────────────────────────────── */
 function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boolean) {
+  ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, W, H);
 
@@ -1793,10 +1808,10 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
       const fadeIn      = Math.min(1, (progress - 0.45) / 0.3);
       ctx.globalAlpha   = fadeIn;
       ctx.textAlign     = 'center';
-      ctx.font          = "24px 'VT323', monospace";
+      ctx.font          = "26px 'VT323', monospace";
       ctx.fillStyle     = C.green;
       ctx.fillText(`ENTERING SECTOR ${sectorName(gs.wave)}`, W / 2, H / 2 - 12);
-      ctx.font          = "15px 'VT323', monospace";
+      ctx.font          = "17px 'VT323', monospace";
       ctx.fillStyle     = C.muted;
       ctx.fillText(`WAVE ${gs.wave}`, W / 2, H / 2 + 14);
       ctx.globalAlpha   = 1;
@@ -1892,7 +1907,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
       ctx.globalAlpha = stAlpha * (0.55 + 0.3 * Math.sin(t * 2.2));
       drawSpr(ctx, SPR.station, C.green, W / 2, 22, 2);
       ctx.globalAlpha = stAlpha;
-      ctx.font      = "11px 'VT323', monospace";
+      ctx.font      = "13px 'VT323', monospace";
       ctx.textAlign = 'center';
       ctx.fillStyle = C.green;
       ctx.fillText('NEO-7', W / 2, 40);
@@ -1955,14 +1970,14 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
 
     // status text
-    ctx.font      = "20px 'VT323', monospace";
+    ctx.font      = "22px 'VT323', monospace";
     ctx.textAlign = 'center';
     ctx.fillStyle = aligned ? C.green : C.amber;
     ctx.fillText(aligned ? 'HOLDING ALIGNMENT' : 'ALIGN FOR DOCK', cx, PY - 44);
 
     // direction nudge
     if (!aligned) {
-      ctx.font        = "15px 'VT323', monospace";
+      ctx.font        = "17px 'VT323', monospace";
       ctx.fillStyle   = C.amber;
       ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 5);
       ctx.fillText(gs.px < cx ? '→  MOVE RIGHT' : 'MOVE LEFT  ←', cx, PY - 26);
@@ -1981,7 +1996,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
       ctx.fillStyle = aligned ? C.green : 'rgba(102,242,165,0.35)';
       ctx.fillRect(mx, my, Math.round(mW * lockPct), mH);
     }
-    ctx.font      = "13px 'VT323', monospace";
+    ctx.font      = "15px 'VT323', monospace";
     ctx.fillStyle = aligned ? C.green : C.muted;
     ctx.fillText('DOCK LOCK', cx, my - 4);
     ctx.textAlign = 'left';
@@ -1989,7 +2004,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
 
   // ascent message
   if (gs.missionKind === 'approach' && gs.dockAscent > 0 && gs.dockAscent < 1) {
-    ctx.font      = "22px 'VT323', monospace";
+    ctx.font      = "24px 'VT323', monospace";
     ctx.textAlign = 'center';
     ctx.fillStyle = C.green;
     ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 6);
@@ -1999,12 +2014,12 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   }
 
   drawArrivalScene(ctx, gs, t);
-  drawHUD(ctx, gs, isTouch);
+  drawHUD(ctx, gs, isTouch, t);
 
   if (gs.gravitySurgeActive || gs.gravitySurgeWarn) {
     const pulse   = 0.65 + 0.35 * Math.sin(t * (gs.gravitySurgeActive ? 10 : 4));
     ctx.textAlign = 'center';
-    ctx.font      = "20px 'VT323', monospace";
+    ctx.font      = "22px 'VT323', monospace";
     ctx.fillStyle = C.amber;
     ctx.globalAlpha = pulse;
     ctx.fillText(gs.gravitySurgeActive ? '⚠ GRAVITY ANCHOR ACTIVE' : '⚠ GTA DRONE DETECTED', W / 2, 54);
@@ -2021,19 +2036,34 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     ctx.fillStyle = 'rgba(7,6,14,0.78)';
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
-    ctx.font      = "32px 'VT323', monospace";
+    ctx.font      = "34px 'VT323', monospace";
     ctx.fillStyle = C.green;
     ctx.fillText('PAUSED', W / 2, H / 2 - 8);
-    ctx.font      = "15px 'VT323', monospace";
+    ctx.font      = "17px 'VT323', monospace";
     ctx.fillStyle = C.muted;
     ctx.fillText(isTouch ? '▶ TO RESUME' : 'P TO RESUME', W / 2, H / 2 + 16);
     ctx.textAlign = 'left';
   }
 }
 
-function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
+function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false, t = 0) {
   const edge = isTouch ? 80 : 110;
-  ctx.font      = "16px 'VT323', monospace";
+
+  // Dark gradient strips so HUD text doesn't fight stars/particles/glow effects
+  const topGrad = ctx.createLinearGradient(0, 0, 0, 52);
+  topGrad.addColorStop(0, 'rgba(7,6,14,0.82)');
+  topGrad.addColorStop(1, 'rgba(7,6,14,0)');
+  ctx.fillStyle = topGrad;
+  ctx.fillRect(0, 0, W, 52);
+
+  const botH = isTouch ? 100 : 68;
+  const botGrad = ctx.createLinearGradient(0, H - botH, 0, H);
+  botGrad.addColorStop(0, 'rgba(7,6,14,0)');
+  botGrad.addColorStop(1, 'rgba(7,6,14,0.82)');
+  ctx.fillStyle = botGrad;
+  ctx.fillRect(0, H - botH, W, botH);
+
+  ctx.font      = "18px 'VT323', monospace";
   ctx.textAlign = 'left';
 
   ctx.fillStyle = C.muted; ctx.fillText('SCORE', edge, 18);
@@ -2060,17 +2090,17 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
       ctx.fillRect(bx, by, BAR_W, BAR_H);
       ctx.fillStyle = C.green;
       ctx.fillRect(bx, by, Math.round(BAR_W * pct / 100), BAR_H);
-      ctx.font      = "12px 'VT323', monospace";
+      ctx.font      = "14px 'VT323', monospace";
       ctx.fillStyle = C.green;
       ctx.fillText(`${mLabel} ${pct}%`, W - edge, 42);
     } else {
-      ctx.font      = "13px 'VT323', monospace";
+      ctx.font      = "15px 'VT323', monospace";
       ctx.fillStyle = C.green;
       ctx.fillText(`${mLabel}: ${pct}%`, W - edge, 34);
     }
   }
 
-  ctx.font      = "16px 'VT323', monospace";
+  ctx.font      = "18px 'VT323', monospace";
   ctx.textAlign = 'left';
 
   // fuel gauge — analog dial (E left · arc over top · F right)
@@ -2080,8 +2110,10 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
     const F_ANG   = 11 * Math.PI / 6;  // upper-right (2 o'clock)
     const gcx     = 42;
     const gcy     = isTouch ? H - 82 : H - 48;
+    const fuelLow = gs.fuel < 1 / 3;
     const fuelClr = gs.fuel > 0.5 ? C.green : gs.fuel > 0.25 ? C.amber : C.red;
     const nAngle  = E_ANG + gs.fuel * (F_ANG - E_ANG);
+    const blinkOn = !fuelLow || Math.sin(t * 9) > 0;
 
     ctx.lineCap = 'round';
 
@@ -2093,7 +2125,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
     ctx.stroke();
 
     // filled arc (E → current level)
-    if (gs.fuel > 0.01) {
+    if (gs.fuel > 0.01 && blinkOn) {
       ctx.strokeStyle = fuelClr;
       ctx.globalAlpha = 0.85;
       ctx.beginPath();
@@ -2103,7 +2135,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
     }
 
     // needle
-    ctx.strokeStyle = fuelClr;
+    ctx.strokeStyle = blinkOn ? fuelClr : 'rgba(200,192,218,0.15)';
     ctx.lineWidth   = 1.5;
     ctx.beginPath();
     ctx.moveTo(gcx, gcy);
@@ -2118,11 +2150,11 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
 
     // E / F end labels
     const lR = GR + 9;
-    ctx.font      = "11px 'VT323', monospace";
+    ctx.font      = "13px 'VT323', monospace";
     ctx.fillStyle = C.muted;
     ctx.textAlign = 'center';
-    ctx.fillText('E', gcx + lR * Math.cos(E_ANG), gcy + lR * Math.sin(E_ANG) + 4);
-    ctx.fillText('F', gcx + lR * Math.cos(F_ANG), gcy + lR * Math.sin(F_ANG) + 4);
+    ctx.fillText('E', Math.round(gcx + lR * Math.cos(E_ANG)), Math.round(gcy + lR * Math.sin(E_ANG) + 4));
+    ctx.fillText('F', Math.round(gcx + lR * Math.cos(F_ANG)), Math.round(gcy + lR * Math.sin(F_ANG) + 4));
 
     // FUEL label inside the bowl
     ctx.fillText('FUEL', gcx, gcy + 12);
@@ -2140,7 +2172,7 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
   // active powerup badge
   if (gs.activePowerup) {
     const info = POWERUP_INFO[gs.activePowerup];
-    ctx.font        = "13px 'VT323', monospace";
+    ctx.font        = "15px 'VT323', monospace";
     ctx.textAlign   = 'left';
     ctx.globalAlpha = 0.85;
     ctx.fillStyle   = info.color;
@@ -2156,16 +2188,16 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
       const fy    = 58 + i * 24;
       ctx.globalAlpha = alpha;
       ctx.textAlign   = 'right';
-      ctx.font        = "16px 'VT323', monospace";
+      ctx.font        = "18px 'VT323', monospace";
       ctx.fillStyle   = C.cyan;
       ctx.fillText(`+${e.pts.toLocaleString()}`, W - edge, fy);
-      ctx.font        = "12px 'VT323', monospace";
+      ctx.font        = "14px 'VT323', monospace";
       ctx.fillStyle   = C.muted;
       ctx.fillText(e.label, W - edge, fy + 13);
     });
     ctx.globalAlpha = 1;
     ctx.textAlign   = 'left';
-    ctx.font        = "16px 'VT323', monospace";
+    ctx.font        = "18px 'VT323', monospace";
   }
 
   // wave clear / dock complete banner
@@ -2173,13 +2205,13 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false) {
     ctx.textAlign = 'center';
     const label    = gs.missionKind === 'approach' ? 'DOCK COMPLETE' : 'ARRIVED';
     const sublabel = gs.missionKind === 'approach' ? 'NEO-7' : sectorName(gs.wave);
-    ctx.font      = "28px 'VT323', monospace";
+    ctx.font      = "30px 'VT323', monospace";
     ctx.fillStyle = C.green;
     ctx.fillText(label, W / 2, H / 2 - 20);
-    ctx.font      = "20px 'VT323', monospace";
+    ctx.font      = "22px 'VT323', monospace";
     ctx.fillStyle = C.cyan;
     ctx.fillText(sublabel, W / 2, H / 2 + 2);
-    ctx.font      = "18px 'VT323', monospace";
+    ctx.font      = "20px 'VT323', monospace";
     ctx.fillStyle = C.amber;
     ctx.fillText(`BONUS  +${Math.round(gs.wave * 500 * gs.activeProfile.bonusMult)}`, W / 2, H / 2 + 24);
     ctx.textAlign = 'left';
@@ -2289,13 +2321,17 @@ export default function GameCanvas() {
   useEffect(() => {
     const canvas  = canvasRef.current!;
     const ctx     = canvas.getContext('2d')!;
-    const isTouch = window.matchMedia('(pointer: coarse)').matches;
-    const dpr     = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width        = W * dpr;
-    canvas.height       = H * dpr;
-    canvas.style.width  = `${W}px`;
-    canvas.style.height = `${H}px`;
-    ctx.scale(dpr, dpr);
+    const isTouch  = window.matchMedia('(pointer: coarse)').matches;
+    const isDesk   = window.matchMedia('(pointer: fine) and (min-width: 900px)').matches;
+    const dispScale = isDesk ? 480 / W : 1;   // 8/7 on desktop, 1 elsewhere
+    const dispW    = Math.round(W * dispScale);
+    const dispH    = Math.round(H * dispScale);
+    const dpr      = window.devicePixelRatio || 1;
+    canvas.width        = Math.round(dispW * dpr);
+    canvas.height       = Math.round(dispH * dpr);
+    canvas.style.width  = `${dispW}px`;
+    canvas.style.height = `${dispH}px`;
+    ctx.scale(dpr * dispScale, dpr * dispScale);
     ctx.imageSmoothingEnabled = false;
 
 
@@ -2714,6 +2750,7 @@ export default function GameCanvas() {
           powerup_choices:  Object.fromEntries(
             Object.entries(powerupChoicesRef.current).map(([w, k]) => [w, k])
           ),
+          deaths:           g.deathLog,
         });
       }
       if (prevPhase === 'over' && g.phase !== 'over') {

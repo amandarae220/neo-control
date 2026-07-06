@@ -98,7 +98,7 @@ created_at       timestamptz
 ```
 VITE_SUPABASE_URL
 VITE_SUPABASE_ANON_KEY
-VITE_ADMIN_PASS       # currently: checkadmininsights
+VITE_ADMIN_PASS       # value lives in .env.local only — never commit
 ```
 
 ---
