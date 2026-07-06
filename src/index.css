@@ -1456,6 +1456,12 @@ button:disabled {
   gap: 20px;
 }
 
+.admin-auth-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .admin-auth-row {
   display: flex;
   gap: 10px;
