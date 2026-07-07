@@ -36,7 +36,7 @@ Live URL: Deployed on Vercel (see `.vercel/project.json` for project/org IDs).
 |---|---|---|
 | `/` | `LandingPage` | Intro / start screen |
 | `/game` | `GameCanvas` | Full game |
-| `/admin` | `AdminPage` | Analytics dashboard — password-gated (`VITE_ADMIN_PASS`) |
+| `/admin` | `AdminPage` | Analytics dashboard — password-gated|
 
 ---
 
@@ -98,7 +98,6 @@ created_at       timestamptz
 ```
 VITE_SUPABASE_URL
 VITE_SUPABASE_ANON_KEY
-VITE_ADMIN_PASS       # value lives in .env.local only — never commit
 ```
 
 ---
