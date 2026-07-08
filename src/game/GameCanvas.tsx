@@ -49,6 +49,7 @@ const C = {
   pink:  '#ff4fd8',
   white: '#eee8ff',
   muted: '#7a7088',
+  blue:  '#4477ff',
 };
 
 /* ── physics profiles ────────────────────────────────────────────────── */
@@ -423,14 +424,20 @@ const DEPOT_SPR = [
   ' ## ## ',
   '[#] [#]',
 ];
-// Vertical gameplay sprite for the commandeered freighter (waves 3+). ~1.5× player size.
+// Vertical gameplay sprite for the commandeered freighter (waves 3+).
+// r = red fin blocks, b = blue cockpit, # = hull (tinted by caller), . = white highlight
 const FREIGHTER_PLAY_SPR = [
-  '  [.]  ',
-  ' ##### ',
-  '#######',
-  '#.###.#',
-  '#######',
-  ' ## ## ',
+  '    ##    ',  // nose
+  '   ####   ',  // upper fuselage
+  '  ######  ',
+  '  ##bb##  ',  // cockpit (blue)
+  'rr######rr',  // wing span (red outer blocks)
+  'rr##bb##rr',  // cockpit at wing level
+  'rr######rr',
+  '  ######  ',  // lower fuselage
+  '  ##  ##  ',  // engine split
+  '  ##  ##  ',
+  '  #    #  ',  // exhaust tips
 ];
 
 function drawSpr(
@@ -445,7 +452,10 @@ function drawSpr(
     for (let rx = 0; rx < row.length; rx++) {
       const ch = row[rx];
       if (ch === ' ') continue;
-      ctx.fillStyle = ch === '.' ? C.white : color;
+      ctx.fillStyle = ch === '.' ? C.white
+                    : ch === 'r' ? C.red
+                    : ch === 'b' ? C.blue
+                    : color;
       ctx.fillRect(ox + rx * ps, oy + ry * ps, ps, ps);
     }
   });
@@ -1731,13 +1741,14 @@ function drawArrivalScene(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
   drawSpr(ctx, FREIGHTER_PLAY_SPR, TINT, freighterX, freighterY, 4);
 
   // Engine glow — cyan pulse, fades in once ship has settled
-  // FREIGHTER_PLAY_SPR bottom row ' ## ## ': cols 1-2 → freighterX-8, cols 4-5 → freighterX+4
+  // FREIGHTER_PLAY_SPR bottom row '  #    #  ': col 2 → freighterX-10, col 7 → freighterX+10
+  // sprW=10×4=40 → ox=freighterX-20; sprH=11×4=44 → bottom row at freighterY+18
   if (slideEase > 0.5) {
     const glowFade  = (slideEase - 0.5) / 0.5;
     const glowPulse = 0.28 + 0.18 * Math.sin(t * 4.8);
-    const ex1 = freighterX - 8;
-    const ex2 = freighterX + 4;
-    const ey  = freighterY + 10;
+    const ex1 = freighterX - 10;
+    const ex2 = freighterX + 10;
+    const ey  = freighterY + 20;
     ctx.fillStyle   = C.cyan;
     ctx.globalAlpha = alpha * glowFade * glowPulse;
     ctx.beginPath(); ctx.arc(ex1, ey, 5, 0, Math.PI * 2); ctx.fill();
