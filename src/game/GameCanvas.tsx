@@ -832,6 +832,16 @@ function tickDebris(gs: GS, dt: number) {
   const thrustFactor = keyThrust ? 1 : stickThrust;
   gs.fuel = Math.max(0, gs.fuel - FUEL_DRAIN_THRUST * thrustFactor * dt);
 
+  if (gs.fuel === 0 && gs.invT <= 0) {
+    gs.deathLog.push({ wave: gs.wave, x: Math.round(gs.px), progress: gs.stationProgress });
+    burst(gs, gs.px, PY, C.amber, 14);
+    gs.bullets = gs.bullets.filter(b => b.player);
+    gs.lives   = 0;
+    gs.phase   = 'die';
+    gs.dieT    = 1.8;
+    return;
+  }
+
   gs.debrisParticles = gs.debrisParticles.filter(p => {
     p.x   += p.vx * dt;
     p.y   += p.vy * dt;
