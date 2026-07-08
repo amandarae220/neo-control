@@ -62,7 +62,7 @@ interface PhysicsProfile {
   preDebris?: number; // ambient debris pre-seeded at level start
 }
 const DEFAULT_PROFILE: PhysicsProfile = {
-  gravMass: 1, rockSpeed: 1, diveFreq: 1, ufoFreq: 1, bonusMult: 1,
+  gravMass: 1, rockSpeed: 1, diveFreq: 1, ufoFreq: 1, bonusMult: 1, preDebris: 6,
 };
 
 /* ── story transmissions ─────────────────────────────────────────────── */
@@ -129,7 +129,7 @@ const TRANSMISSIONS: WaveBrief[] = [
       '    FASTER EXIT.  +30% BONUS.',
     ],
     profiles: [
-      { gravMass: 0.8, rockSpeed: 0.6, diveFreq: 0.3, ufoFreq: 0.6, bonusMult: 1,   preDebris: 10 },
+      { gravMass: 0.8, rockSpeed: 0.6, diveFreq: 0.3, ufoFreq: 0.6, bonusMult: 1,   preDebris: 16 },
       { gravMass: 0.5, rockSpeed: 1.6, diveFreq: 1.8, ufoFreq: 1,   bonusMult: 1.3 },
     ],
   },
@@ -362,6 +362,7 @@ interface GS {
   powerupOffer:    [PowerupKind, PowerupKind] | null;
   activePowerup:   ActivePowerup | null;
   deathLog:        { wave: number; x: number; progress: number }[];
+  fuelAddT:        number;
 }
 
 interface ScoreEvent {
@@ -633,6 +634,7 @@ function newGame(
     powerupOffer:    null,
     activePowerup,
     deathLog:        [],
+    fuelAddT:        0,
   };
   if (profile.preDebris) {
     for (let i = 0; i < profile.preDebris; i++) {
@@ -801,9 +803,9 @@ function tickGravRocks(gs: GS, dt: number) {
 }
 
 /* ── debris / fuel ───────────────────────────────────────────────────── */
-const FUEL_DRAIN_THRUST = 0.030;
-const FUEL_PER_DEBRIS   = 0.012;
-const DEBRIS_COLLECT_R  = 12;
+const FUEL_DRAIN_THRUST = 0.016;  // full tank lasts ~62s of continuous thrust (was 33s)
+const FUEL_PER_DEBRIS   = 0.025;  // ~15-22% fuel per kill's debris cloud (was 7-11%)
+const DEBRIS_COLLECT_R  = 16;     // wider pickup zone, less pixel-perfect frustration
 
 function spawnDebris(gs: GS, x: number, y: number, count: number) {
   for (let i = 0; i < count; i++) {
@@ -830,6 +832,16 @@ function tickDebris(gs: GS, dt: number) {
   const thrustFactor = keyThrust ? 1 : stickThrust;
   gs.fuel = Math.max(0, gs.fuel - FUEL_DRAIN_THRUST * thrustFactor * dt);
 
+  if (gs.fuel === 0 && gs.invT <= 0) {
+    gs.deathLog.push({ wave: gs.wave, x: Math.round(gs.px), progress: gs.stationProgress });
+    burst(gs, gs.px, PY, C.amber, 14);
+    gs.bullets = gs.bullets.filter(b => b.player);
+    gs.lives   = 0;
+    gs.phase   = 'die';
+    gs.dieT    = 1.8;
+    return;
+  }
+
   gs.debrisParticles = gs.debrisParticles.filter(p => {
     p.x   += p.vx * dt;
     p.y   += p.vy * dt;
@@ -838,7 +850,8 @@ function tickDebris(gs: GS, dt: number) {
 
     const dx = p.x - gs.px, dy = p.y - PY;
     if (Math.sqrt(dx * dx + dy * dy) < DEBRIS_COLLECT_R) {
-      gs.fuel = Math.min(1, gs.fuel + FUEL_PER_DEBRIS);
+      gs.fuel     = Math.min(1, gs.fuel + FUEL_PER_DEBRIS);
+      gs.fuelAddT = 0.45;
       return false;
     }
     return true;
@@ -1088,7 +1101,8 @@ function update(gs: GS, dt: number) {
   });
 
   /* ── player move ── */
-  gs.invT = Math.max(0, gs.invT - dt);
+  gs.invT    = Math.max(0, gs.invT    - dt);
+  gs.fuelAddT = Math.max(0, gs.fuelAddT - dt);
   if (gs.dockAscent <= 0 && gs.fuel > 0) {
     if (gs.keys.has('ArrowLeft')  || gs.keys.has('a')) gs.px = Math.max(14, gs.px - P_SPD * dt);
     if (gs.keys.has('ArrowRight') || gs.keys.has('d')) gs.px = Math.min(W - 14, gs.px + P_SPD * dt);
@@ -1880,11 +1894,12 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
 
   // debris particles — small clustered plus signs from destroyed enemies
   gs.debrisParticles.forEach(p => {
-    const alpha = p.life * (0.12 + 0.08 * Math.sin(t * 5 + p.id * 0.7));
+    const alpha = p.life * (0.18 + 0.10 * Math.sin(t * 5 + p.id * 0.7));
     ctx.globalAlpha = alpha;
-    ctx.fillStyle   = C.green;
-    ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = p.life * 0.9;
+    ctx.fillStyle   = C.amber;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = p.life * 0.95;
+    ctx.fillStyle   = C.amber;
     ctx.fillRect(Math.floor(p.x),     Math.floor(p.y - 2), 1, 5); // vertical
     ctx.fillRect(Math.floor(p.x - 2), Math.floor(p.y),     5, 1); // horizontal
   });
@@ -2169,6 +2184,23 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false, t = 0) 
 
     // FUEL label inside the bowl
     ctx.fillText('FUEL', gcx, gcy + 12);
+
+    // +FUEL feedback — amber pulse and label when debris just collected
+    if (gs.fuelAddT > 0) {
+      const fadeFrac = gs.fuelAddT / 0.45;
+      ctx.globalAlpha = fadeFrac * 0.7;
+      ctx.strokeStyle = C.amber;
+      ctx.lineWidth   = 3;
+      ctx.beginPath();
+      ctx.arc(gcx, gcy, GR + 5, E_ANG, nAngle, false);
+      ctx.stroke();
+      ctx.globalAlpha = fadeFrac;
+      ctx.fillStyle   = C.amber;
+      ctx.font        = "13px 'VT323', monospace";
+      ctx.textAlign   = 'left';
+      ctx.fillText('+FUEL', gcx + GR + 6, gcy + 4);
+      ctx.globalAlpha = 1;
+    }
 
     ctx.lineCap   = 'butt';
     ctx.lineWidth = 1;
