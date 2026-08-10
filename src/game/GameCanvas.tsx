@@ -60,9 +60,14 @@ interface PhysicsProfile {
   ufoFreq:   number; // UFO interval multiplier (>1 = fewer UFOs)
   bonusMult: number; // score multiplier
   preDebris?: number; // ambient debris pre-seeded at level start
+  enemySpawnMult?: number; // enemy spawn interval multiplier (>1 = fewer enemies)
+  debrisRate?:     number; // ambient fuel debris spawned per second (0 = none)
+  maxRocks?:       number; // per-profile gravity-rock cap (default MAX_ROCKS)
+  rockRadius?:     number; // per-profile gravity-rock radius (default 75)
 }
 const DEFAULT_PROFILE: PhysicsProfile = {
   gravMass: 1, rockSpeed: 1, diveFreq: 1, ufoFreq: 1, bonusMult: 1, preDebris: 6,
+  enemySpawnMult: 1, debrisRate: 0,
 };
 
 /* ── story transmissions ─────────────────────────────────────────────── */
@@ -117,8 +122,8 @@ const TRANSMISSIONS: WaveBrief[] = [
       '    FASTER SPEED. FASTER EXIT.',
     ],
     profiles: [
-      { gravMass: 0.8, rockSpeed: 0.6, diveFreq: 0.3, ufoFreq: 0.6, bonusMult: 1,   preDebris: 16 },
-      { gravMass: 0.5, rockSpeed: 1.6, diveFreq: 1.8, ufoFreq: 1,   bonusMult: 1.3 },
+      { gravMass: 1.6, rockSpeed: 0.7, diveFreq: 0.3, ufoFreq: 1.4, bonusMult: 1,   preDebris: 20, enemySpawnMult: 1.7,  debrisRate: 0.6, maxRocks: 6, rockRadius: 90 },
+      { gravMass: 0.5, rockSpeed: 1.7, diveFreq: 1.8, ufoFreq: 1,   bonusMult: 1.3, preDebris: 2,  enemySpawnMult: 0.75, debrisRate: 0 },
     ],
   },
   { // wave 2 → wave 3: transit to Velon-4 Lagrange point, commandeer freighter
@@ -353,6 +358,7 @@ interface GS {
   activePowerup:   ActivePowerup | null;
   deathLog:        { wave: number; x: number; progress: number }[];
   fuelAddT:        number;
+  ambientDebrisT:  number;
 }
 
 interface ScoreEvent {
@@ -576,7 +582,7 @@ function mkRock(id: number, profile: PhysicsProfile = DEFAULT_PROFILE): GravRock
   return {
     id, x, y,
     vx: (dx / d) * spd, vy: (dy / d) * spd,
-    mass: 120 * profile.gravMass, radius: 75,
+    mass: 120 * profile.gravMass, radius: profile.rockRadius ?? 75,
   };
 }
 
@@ -608,7 +614,7 @@ function newGame(
     introT: 0, jumpT: 0, gravitySurgeTimer: 0, gravitySurgeActive: false, gravitySurgeWarn: false, gtaDroneLeft: false, gtaDroneHP: 3, gtaDroneShootT: 0, stickX: 0,
     missionKind:     wave === 1 ? 'approach' : 'transit',
     missionT:        0,
-    spawnEnemyT:     8 + Math.random() * 4,
+    spawnEnemyT:     (8 + Math.random() * 4) * (profile.enemySpawnMult ?? 1),
     stationProgress: 0,
     dockSeq:         false,
     dockLock:        0,
@@ -625,6 +631,7 @@ function newGame(
     activePowerup,
     deathLog:        [],
     fuelAddT:        0,
+    ambientDebrisT:  0,
   };
   if (profile.preDebris) {
     for (let i = 0; i < profile.preDebris; i++) {
@@ -738,7 +745,7 @@ const MAX_ROCKS = 4;
 
 function tickGravRocks(gs: GS, dt: number) {
   gs.spawnRockT -= dt;
-  if (gs.spawnRockT <= 0 && gs.gravRocks.length < MAX_ROCKS) {
+  if (gs.spawnRockT <= 0 && gs.gravRocks.length < (gs.activeProfile.maxRocks ?? MAX_ROCKS)) {
     gs.gravRocks.push(mkRock(gs.seq++, gs.activeProfile));
     gs.spawnRockT = 4 + Math.random() * 4;
   }
@@ -798,9 +805,10 @@ const FUEL_PER_DEBRIS   = 0.025;  // ~15-22% fuel per kill's debris cloud (was 7
 const DEBRIS_COLLECT_R  = 16;     // wider pickup zone, less pixel-perfect frustration
 
 function spawnDebris(gs: GS, x: number, y: number, count: number) {
+  const spdMult = gs.activeProfile.rockSpeed ?? 1;
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = 8 + Math.random() * 18;
+    const speed = (8 + Math.random() * 18) * spdMult;
     gs.debrisParticles.push({
       id:      gs.seq++,
       x:       x + (Math.random() - 0.5) * 12,
@@ -846,6 +854,24 @@ function tickDebris(gs: GS, dt: number) {
     }
     return true;
   });
+
+  // ambient fuel-debris trickle (fuel-rich profiles keep the field stocked)
+  const debrisRate = gs.activeProfile.debrisRate ?? 0;
+  if (debrisRate > 0) {
+    gs.ambientDebrisT -= dt;
+    if (gs.ambientDebrisT <= 0) {
+      gs.debrisParticles.push({
+        id:      gs.seq++,
+        x:       20 + Math.random() * (W - 40),
+        y:       -10,
+        vx:      (Math.random() - 0.5) * 10,
+        vy:      (18 + Math.random() * 14) * (gs.activeProfile.rockSpeed ?? 1),
+        life:    0.4 + Math.random() * 0.5,
+        maxLife: 20 + Math.random() * 15,
+      });
+      gs.ambientDebrisT = 1 / debrisRate;
+    }
+  }
 }
 
 /* ── planet mechanics ────────────────────────────────────────────────── */
@@ -1156,7 +1182,7 @@ function update(gs: GS, dt: number) {
     gs.spawnEnemyT -= dt;
     if (gs.spawnEnemyT <= 0 && gs.stationProgress < 0.95) {
       gs.enemies.push(mkEnemy(gs.wave, gs.activeProfile, gs.seq++));
-      gs.spawnEnemyT = 10 + Math.random() * 8;
+      gs.spawnEnemyT = (10 + Math.random() * 8) * (gs.activeProfile.enemySpawnMult ?? 1);
     }
   }
   if (gs.missionKind === 'transit') {
@@ -1175,7 +1201,7 @@ function update(gs: GS, dt: number) {
       const n = 1 + Math.floor(Math.random() * 2);
       for (let i = 0; i < n; i++)
         gs.enemies.push(mkEnemy(gs.wave, gs.activeProfile, gs.seq++));
-      gs.spawnEnemyT = 6 + Math.random() * 6;
+      gs.spawnEnemyT = (6 + Math.random() * 6) * (gs.activeProfile.enemySpawnMult ?? 1);
     }
   }
 
