@@ -1934,27 +1934,16 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     drawSpr(ctx, eSpr(e.kind), flash ? C.white : col, e.x, e.y + bob);
   });
 
-  // station icon — fades in during approach, grows during docking sequence
-  if (gs.missionKind === 'approach') {
-    if (gs.dockSeq) {
-      const prog  = gs.dockLock / DOCK_HOLD_TIME;
-      const scale = 2 + prog * 2.5;
-      const yPos  = 22 + prog * 55;
-      ctx.globalAlpha = 0.8 + 0.2 * Math.sin(t * 8);
-      drawSpr(ctx, SPR.station, C.green, W / 2, yPos, scale);
-      ctx.globalAlpha = 1;
-    } else if (gs.stationProgress > 0.6) {
-      const stAlpha = Math.min(1, (gs.stationProgress - 0.6) / 0.25);
-      ctx.globalAlpha = stAlpha * (0.55 + 0.3 * Math.sin(t * 2.2));
-      drawSpr(ctx, SPR.station, C.green, W / 2, 22, 2);
-      ctx.globalAlpha = stAlpha;
-      ctx.font      = "13px 'VT323', monospace";
-      ctx.textAlign = 'center';
-      ctx.fillStyle = C.green;
-      ctx.fillText('NEO-7', W / 2, 40);
-      ctx.textAlign = 'left';
-      ctx.globalAlpha = 1;
-    }
+  // station icon — grows during the docking sequence.
+  // (The pre-dock approach icon + "NEO-7" label were removed: they sat at
+  // top-center and overlapped the centered HI-SCORE HUD readout.)
+  if (gs.missionKind === 'approach' && gs.dockSeq) {
+    const prog  = gs.dockLock / DOCK_HOLD_TIME;
+    const scale = 2 + prog * 2.5;
+    const yPos  = 22 + prog * 55;
+    ctx.globalAlpha = 0.8 + 0.2 * Math.sin(t * 8);
+    drawSpr(ctx, SPR.station, C.green, W / 2, yPos, scale);
+    ctx.globalAlpha = 1;
   }
 
   // bullets
