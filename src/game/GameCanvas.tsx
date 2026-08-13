@@ -135,12 +135,11 @@ const TRANSMISSIONS: WaveBrief[] = [
       'STANDARD RETURN ROUTE: CLOSED.',
       'REASON: YOU.',
       '',
-      'REROUTING THROUGH THE',
-      'VELON-4 LAGRANGE POINT.',
+      'REROUTING THROUGH THEVELON-4 LAGRANGE POINT.',
       'THERE IS A FREIGHTER THERE IN HOLDING ORBIT.',
       'IT IS NOT OURS. IT BELONGS TO XYLONS.',
       '',
-      'DOCK WITH IT. COMMANDEER IT.',
+      'DOCK AND COMMANDEER IT.',
       'THE XYLON CREW IS ALSO WANTED.',
       'THEY WILL UNDERSTAND.',
       '',
@@ -1727,18 +1726,17 @@ function drawGTADrone(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
 }
 
 /* ── Velon-4 Lagrange point arrival scene ────────────────────────────── */
-function drawArrivalScene(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
+function drawArrivalScene(ctx: CanvasRenderingContext2D, gs: GS) {
   if (gs.wave !== 2 || gs.waveT <= 0) return;
 
-  const elapsed  = 2.5 - gs.waveT;
-  const fadeIn   = Math.min(1, elapsed / 0.4);
+  const fadeIn   = Math.min(1, (2.5 - gs.waveT) / 0.4);
   const fadeOut  = Math.min(1, gs.waveT / 0.3);
   const alpha    = fadeIn * fadeOut;
   if (alpha <= 0) return;
 
-  const TINT = '#7a8899';
-
-  // Velon-4 — distant planet dot, upper-left (below HUD score row)
+  // Velon-4 — distant planet dot, upper-left (below HUD score row).
+  // The fuel depot + freighter were removed here: they appeared before the
+  // briefing that names them; both get a proper reveal in the wave-3 intro.
   ctx.fillStyle   = '#5a9fd4';
   ctx.globalAlpha = alpha * 0.65;
   ctx.beginPath(); ctx.arc(72, 82, 7, 0, Math.PI * 2); ctx.fill();
@@ -1751,41 +1749,6 @@ function drawArrivalScene(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
   ctx.fillText('VELON-4', 85, 80);
   ctx.globalAlpha = alpha * 0.30;
   ctx.fillText('↑ 340,000 km', 85, 93);
-
-  // Fuel depot — enters from top, settles upper-right, gentle bob
-  const depotSlideT  = Math.min(1, elapsed / 1.5);
-  const depotEase    = 1 - Math.pow(1 - depotSlideT, 3);
-  const depotFinalY  = 148;
-  const depotY       = depotFinalY + (1 - depotEase) * (-depotFinalY - 30) + Math.sin(t * 0.4) * 2.5;
-  ctx.globalAlpha = alpha * depotEase * 0.72;
-  drawSpr(ctx, DEPOT_SPR, TINT, 310, depotY, 5);
-
-  // Freighter — enters from top slightly later, settles center, drifts
-  const slideT    = Math.min(1, elapsed / 2.2);
-  const slideEase = 1 - Math.pow(1 - slideT, 3);
-  const freighterFinalY = 218;
-  const freighterX = W / 2 + Math.sin(t * 0.26) * 1.5;
-  const freighterY = freighterFinalY + (1 - slideEase) * (-freighterFinalY - 20) + Math.cos(t * 0.21) * 2;
-  ctx.globalAlpha  = alpha * slideEase * 0.82;
-  drawSpr(ctx, FREIGHTER_PLAY_SPR, TINT, freighterX, freighterY, 4);
-
-  // Engine glow — cyan pulse, fades in once ship has settled
-  // FREIGHTER_PLAY_SPR bottom row '  #    #  ': col 2 → freighterX-10, col 7 → freighterX+10
-  // sprW=10×4=40 → ox=freighterX-20; sprH=11×4=44 → bottom row at freighterY+18
-  if (slideEase > 0.5) {
-    const glowFade  = (slideEase - 0.5) / 0.5;
-    const glowPulse = 0.28 + 0.18 * Math.sin(t * 4.8);
-    const ex1 = freighterX - 10;
-    const ex2 = freighterX + 10;
-    const ey  = freighterY + 20;
-    ctx.fillStyle   = C.cyan;
-    ctx.globalAlpha = alpha * glowFade * glowPulse;
-    ctx.beginPath(); ctx.arc(ex1, ey, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(ex2, ey, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = alpha * glowFade * glowPulse * 0.3;
-    ctx.beginPath(); ctx.arc(ex1, ey, 9, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(ex2, ey, 9, 0, Math.PI * 2); ctx.fill();
-  }
 
   ctx.globalAlpha = 1;
   ctx.textAlign   = 'left';
@@ -2043,7 +2006,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     ctx.textAlign = 'left';
   }
 
-  drawArrivalScene(ctx, gs, t);
+  drawArrivalScene(ctx, gs);
   drawHUD(ctx, gs, isTouch, t);
 
   if (gs.gravitySurgeActive || gs.gravitySurgeWarn) {
