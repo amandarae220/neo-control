@@ -24,7 +24,7 @@ function randomCallsign(): string {
 }
 
 /* ── canvas dimensions ───────────────────────────────────────────────── */
-const W = 420;
+const W = 435;
 const H = 560;
 const PX = 3; // one game pixel = 3 canvas pixels
 
@@ -84,13 +84,12 @@ const INTRO_TRANSMISSION: string[] = [
   'MISSION ASSIGNMENT: SUPPLY RUN TO NEO-7.',
   '',
   'OUR DELIVERY FLEET HAS BEEN COMPROMISED.',
-  'AUTOPILOT IS DISABLED.',
-  'WE CALLED TEN QUALIFIED PILOTS. NONE ANSWERED.',
-  'YOU WERE CALL NUMBER ELEVEN.',
+  'AUTOPILOT IS DISABLED. WE CALLED TEN QUALIFIED',
+  'PILOTS. NONE ANSWERED. YOU WERE CALL NUMBER ELEVEN.',
   '',
-  'NEO-7 IS DIRECTLY AHEAD.',
-  'DOCK YOUR SHIP. DELIVER SUPPLIES.',
-  'DAMAGE TO YOUR SHIP OR NEO-7 WILL BE DEDUCTED FROM YOUR PAY.',
+  'NEO-7 IS DIRECTLY AHEAD. DOCK YOUR SHIP. DELIVER SUPPLIES.',
+  'DAMAGE TO YOUR SHIP OR NEO-7 WILL BE DEDUCTED FROM',
+  'YOUR PAY.',
   '',
   'TRAINING REFRESHER: FUEL DRAINS ON THRUST.',
   'DEBRIS REFUELS. GAUGE IS BOTTOM LEFT.',
@@ -1765,7 +1764,7 @@ function drawArrivalScene(ctx: CanvasRenderingContext2D, gs: GS, t: number) {
   const slideT    = Math.min(1, elapsed / 2.2);
   const slideEase = 1 - Math.pow(1 - slideT, 3);
   const freighterFinalY = 218;
-  const freighterX = 210 + Math.sin(t * 0.26) * 1.5;
+  const freighterX = W / 2 + Math.sin(t * 0.26) * 1.5;
   const freighterY = freighterFinalY + (1 - slideEase) * (-freighterFinalY - 20) + Math.cos(t * 0.21) * 2;
   ctx.globalAlpha  = alpha * slideEase * 0.82;
   drawSpr(ctx, FREIGHTER_PLAY_SPR, TINT, freighterX, freighterY, 4);
@@ -2382,7 +2381,7 @@ export default function GameCanvas() {
     const ctx     = canvas.getContext('2d')!;
     const isTouch  = window.matchMedia('(pointer: coarse)').matches;
     const isDesk   = window.matchMedia('(pointer: fine) and (min-width: 900px)').matches;
-    const dispScale = isDesk ? 480 / W : 1;   // 8/7 on desktop, 1 elsewhere
+    const dispScale = isDesk ? 640 / H : 1;   // desktop canvas locked to 640px tall (8/7); 1 elsewhere
     const dispW    = Math.round(W * dispScale);
     const dispH    = Math.round(H * dispScale);
     const dpr      = window.devicePixelRatio || 1;
