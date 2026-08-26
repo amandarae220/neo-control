@@ -36,6 +36,9 @@ const EB_SPD = 150;      // enemy bullet speed px/s (down)
 const MAX_BULLETS    = 3;
 const DOCK_TOL       = 44;   // px from center counted as aligned
 const DOCK_HOLD_TIME = 2.2;  // seconds to hold alignment for successful dock
+
+// Waves that end by docking with a target: wave 1 → NEO-7, wave 2 → Xylon freighter.
+function docksAtEnd(wave: number): boolean { return wave === 1 || wave === 2; }
 const ASCENT_DURATION = 1.8; // seconds for rocket ascent animation
 
 
@@ -110,6 +113,10 @@ const TRANSMISSIONS: WaveBrief[] = [
       'GALACTIC TRANSIT AUTHORITY (GTA). FIVE TO BE EXACT.',
       'THERE IS A WARRANT OUT FOR YOUR CAPTURE…',
       '',
+      'DISAPPEAR VIA THE VELON-4 LAGRANGE POINT.',
+      'A XYLON FREIGHTER WAITS THERE IN HOLDING ORBIT —',
+      'DOCK AND COMMANDEER IT AT THE ROUTE\'S END.',
+      '',
       'PICK AN ESCAPE ROUTE. CHECK FUEL GAUGE BEFORE CHOOSING.',
       '',
       '[1] DEBRIS FIELD',
@@ -125,7 +132,7 @@ const TRANSMISSIONS: WaveBrief[] = [
       { gravMass: 0.5, rockSpeed: 1.7, diveFreq: 1.8, ufoFreq: 1,   bonusMult: 1.3, preDebris: 2,  enemySpawnMult: 0.75, debrisRate: 0 },
     ],
   },
-  { // wave 2 → wave 3: transit to Velon-4 Lagrange point, commandeer freighter
+  { // wave 2 → wave 3: post-commandeer debrief + wave-3 getaway setup
     lines: [
       '>>> NEO CONTROL  //  INCOMING TRANSMISSION',
       '',
@@ -135,13 +142,11 @@ const TRANSMISSIONS: WaveBrief[] = [
       'STANDARD RETURN ROUTE: CLOSED.',
       'REASON: YOU.',
       '',
-      'REROUTING THROUGH THEVELON-4 LAGRANGE POINT.',
-      'THERE IS A FREIGHTER THERE IN HOLDING ORBIT.',
-      'IT IS NOT OURS. IT BELONGS TO XYLONS.',
+      'XYLON FREIGHTER: COMMANDEERED.',
+      'NICE WORK AT THE VELON-4 LAGRANGE POINT.',
       '',
-      'DOCK AND COMMANDEER IT.',
-      'THE XYLON CREW IS ALSO WANTED.',
-      'THEY WILL UNDERSTAND.',
+      'THE CREW WAS ALSO WANTED.',
+      'THEY UNDERSTOOD.',
       '',
       'THE TEXTBOOK ROUTE FOR YOUR GETAWAY',
       'REQUIRES A HOHMANN TRANSFER ORBIT.',
@@ -327,6 +332,7 @@ interface GS {
   txProfiles:    [PhysicsProfile, PhysicsProfile] | null;
   txChoiceTimer: number;
   txScroll:      number;
+  txMoreUsed:    boolean;
   paused:        boolean;
   introT:              number;
   jumpT:               number;
@@ -608,7 +614,7 @@ function newGame(
     spawnRockT: 5 + Math.random() * 3,
     planets: [], spawnPlanetT: 6,
     txLines: [], txLine: 0, txCh: 0, txDone: false, txWait: 0,
-    txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0, txScroll: 0, paused: false,
+    txIsIntro: false, txHasChoice: false, txProfiles: null, txChoiceTimer: 0, txScroll: 0, txMoreUsed: false, paused: false,
     introT: 0, jumpT: 0, gravitySurgeTimer: 0, gravitySurgeActive: false, gravitySurgeWarn: false, gtaDroneLeft: false, gtaDroneHP: 3, gtaDroneShootT: 0, stickX: 0,
     missionKind:     wave === 1 ? 'approach' : 'transit',
     missionT:        0,
@@ -660,7 +666,7 @@ function startBrief(gs: GS) {
   gs.txHasChoice  = !!brief.profiles;
   gs.txProfiles   = brief.profiles ?? null;
   gs.txChoiceTimer = 0;
-  gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0; gs.txScroll = 0;
+  gs.txLine = 0; gs.txCh = 0; gs.txDone = false; gs.txWait = 0; gs.txScroll = 0; gs.txMoreUsed = false;
 }
 
 function pickPowerup(gs: GS, kind: PowerupKind) {
@@ -1236,8 +1242,8 @@ function update(gs: GS, dt: number) {
     }
   });
 
-  /* ── docking sequence: trigger when approach timer completes ── */
-  if (gs.missionKind === 'approach' && !gs.dockSeq && gs.stationProgress >= 1) {
+  /* ── docking sequence: trigger when the mission distance completes ── */
+  if (docksAtEnd(gs.wave) && !gs.dockSeq && gs.stationProgress >= 1) {
     gs.dockSeq      = true;
     gs.enemies      = [];
     gs.bullets      = gs.bullets.filter(b => b.player);
@@ -1262,7 +1268,7 @@ function update(gs: GS, dt: number) {
   }
 
   /* ── wave clear ── */
-  const waveClear = gs.missionKind === 'approach'
+  const waveClear = docksAtEnd(gs.wave)
     ? gs.dockSeq && gs.dockAscent >= 1
     : gs.stationProgress >= 1;
 
@@ -1494,8 +1500,8 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
   }
   ctx.restore();
 
-  // gradient fade + scroll arrow (only when more content is hidden below)
-  if (hasOverflow && !atBottom) {
+  // gradient fade + scroll arrow (shown until the reader first reaches the bottom)
+  if (hasOverflow && !atBottom && !gs.txMoreUsed) {
     // gradient fade blending into the arrow area
     const grad = ctx.createLinearGradient(0, arrowY - 20, 0, arrowY);
     grad.addColorStop(0, 'rgba(7,6,14,0)');
@@ -1519,6 +1525,19 @@ function drawBrief(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: bo
     ctx.textAlign   = 'center';
     ctx.fillText('MORE  ↓', W / 2, arrowY + arrowH - 7);
     ctx.globalAlpha = 1;
+  }
+
+  // thin scrollbar on the right edge of the text area
+  if (hasOverflow) {
+    const sbW    = 3;
+    const sbX    = TX_PAD + bw - sbW - 3;
+    const trackH = clipH;
+    ctx.fillStyle = 'rgba(122,112,136,0.22)';
+    ctx.fillRect(sbX, clipTop, sbW, trackH);
+    const thumbH = Math.max(18, trackH * (trackH / (trackH + maxScroll)));
+    const thumbY = clipTop + (scroll / maxScroll) * (trackH - thumbH);
+    ctx.fillStyle = gs.txHasChoice ? 'rgba(247,199,106,0.8)' : 'rgba(102,242,165,0.8)';
+    ctx.fillRect(sbX, Math.round(thumbY), sbW, Math.round(thumbH));
   }
 
   // footer — solid background prevents any text bleeding through
@@ -1897,15 +1916,17 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     drawSpr(ctx, eSpr(e.kind), flash ? C.white : col, e.x, e.y + bob);
   });
 
-  // station icon — grows during the docking sequence.
-  // (The pre-dock approach icon + "NEO-7" label were removed: they sat at
-  // top-center and overlapped the centered HI-SCORE HUD readout.)
-  if (gs.missionKind === 'approach' && gs.dockSeq) {
-    const prog  = gs.dockLock / DOCK_HOLD_TIME;
-    const scale = 2 + prog * 2.5;
-    const yPos  = 22 + prog * 55;
+  // dock target — grows during the docking sequence. NEO-7 station for wave 1,
+  // the Xylon freighter for wave 2. (The old pre-dock icon was removed because it
+  // sat at top-center and overlapped the HI-SCORE HUD readout.)
+  if (docksAtEnd(gs.wave) && gs.dockSeq) {
+    const prog = gs.dockLock / DOCK_HOLD_TIME;
     ctx.globalAlpha = 0.8 + 0.2 * Math.sin(t * 8);
-    drawSpr(ctx, SPR.station, C.green, W / 2, yPos, scale);
+    if (gs.wave === 2) {
+      drawSpr(ctx, FREIGHTER_PLAY_SPR, '#9fb2c4', W / 2, 24 + prog * 50, 2 + prog * 2);
+    } else {
+      drawSpr(ctx, SPR.station, C.green, W / 2, 22 + prog * 55, 2 + prog * 2.5);
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -1937,7 +1958,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   ctx.globalAlpha = 1;
 
   // docking alignment overlay (hidden once ascent begins)
-  if (gs.missionKind === 'approach' && gs.dockSeq && gs.dockAscent <= 0) {
+  if (docksAtEnd(gs.wave) && gs.dockSeq && gs.dockAscent <= 0) {
     const cx      = W / 2;
     const aligned = Math.abs(gs.px - cx) <= DOCK_TOL;
     const lockPct = gs.dockLock / DOCK_HOLD_TIME;
@@ -1962,11 +1983,16 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
 
-    // status text
-    ctx.font      = "22px 'VT323', monospace";
+    // status text — name the dock target, then the align prompt
+    const dockName   = gs.wave === 2 ? 'XYLON FREIGHTER' : 'NEO-7';
+    const dockAction = gs.wave === 2 ? 'ALIGN TO COMMANDEER' : 'ALIGN FOR DOCK';
     ctx.textAlign = 'center';
+    ctx.font      = "15px 'VT323', monospace";
+    ctx.fillStyle = C.muted;
+    ctx.fillText(dockName, cx, PY - 62);
+    ctx.font      = "22px 'VT323', monospace";
     ctx.fillStyle = aligned ? C.green : C.amber;
-    ctx.fillText(aligned ? 'HOLDING ALIGNMENT' : 'ALIGN FOR DOCK', cx, PY - 44);
+    ctx.fillText(aligned ? 'HOLDING ALIGNMENT' : dockAction, cx, PY - 44);
 
     // direction nudge
     if (!aligned) {
@@ -1996,12 +2022,12 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   }
 
   // ascent message
-  if (gs.missionKind === 'approach' && gs.dockAscent > 0 && gs.dockAscent < 1) {
+  if (docksAtEnd(gs.wave) && gs.dockAscent > 0 && gs.dockAscent < 1) {
     ctx.font      = "24px 'VT323', monospace";
     ctx.textAlign = 'center';
     ctx.fillStyle = C.green;
     ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 6);
-    ctx.fillText('DOCKING…', W / 2, PY - 30);
+    ctx.fillText(gs.wave === 2 ? 'COMMANDEERING…' : 'DOCKING…', W / 2, PY - 30);
     ctx.globalAlpha = 1;
     ctx.textAlign = 'left';
   }
@@ -2213,8 +2239,8 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false, t = 0) 
   // wave clear / dock complete banner
   if (gs.waveT > 0) {
     ctx.textAlign = 'center';
-    const label    = gs.missionKind === 'approach' ? 'DOCK COMPLETE' : 'ARRIVED';
-    const sublabel = gs.missionKind === 'approach' ? 'NEO-7' : sectorName(gs.wave);
+    const label    = docksAtEnd(gs.wave) ? (gs.wave === 2 ? 'COMMANDEERED'    : 'DOCK COMPLETE') : 'ARRIVED';
+    const sublabel = docksAtEnd(gs.wave) ? (gs.wave === 2 ? 'XYLON FREIGHTER' : 'NEO-7')         : sectorName(gs.wave);
     ctx.font      = "30px 'VT323', monospace";
     ctx.fillStyle = C.green;
     ctx.fillText(label, W / 2, H / 2 - 20);
@@ -2248,7 +2274,7 @@ function processCheat(gs: GS, raw: string): string {
     case 'SKIPWAVE':
     case 'NEXTWAVE':
     case 'ENDWAVE':
-      if (gs.missionKind === 'approach') {
+      if (docksAtEnd(gs.wave)) {
         gs.enemies    = [];
         gs.dockSeq    = true;
         gs.dockLock   = DOCK_HOLD_TIME;
@@ -2277,6 +2303,7 @@ function processCheat(gs: GS, raw: string): string {
 /* ── component ───────────────────────────────────────────────────────── */
 export default function GameCanvas() {
   const canvasRef        = useRef<HTMLCanvasElement>(null);
+  const scrollDragRef    = useRef(false);
   const sidebarRef       = useRef<HTMLDivElement>(null);
   const progressFillRef  = useRef<HTMLDivElement>(null);
   const choiceOverlayRef = useRef<HTMLDivElement>(null);
@@ -2557,7 +2584,7 @@ export default function GameCanvas() {
         }
       }
 
-      if (g.phase === 'brief') {
+      if (g.phase === 'brief' && !g.txMoreUsed) {
         const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(g, false);
         if (maxScroll > 0 && g.txScroll < maxScroll - 1
             && cx >= arrowX && cx <= arrowX + arrowW
@@ -2589,16 +2616,85 @@ export default function GameCanvas() {
         return;
       }
 
-      // "More ↓" scroll button — also handle non-desktop here for safety
-      if (g.phase !== 'brief') return;
-      const { maxScroll, arrowX, arrowY, arrowW, arrowH } = briefScrollBounds(g, isTouch);
-      if (maxScroll > 0 && g.txScroll < maxScroll - 1
-          && cx >= arrowX && cx <= arrowX + arrowW
-          && cy >= arrowY && cy <= arrowY + arrowH) {
-        g.txScroll = maxScroll;
-      }
+      // MORE ↓ — jump to the bottom, then retire the button for this brief
+      if (g.phase !== 'brief' || zone !== 'more') return;
+      const { maxScroll } = briefScrollBounds(g, isTouch);
+      g.txScroll   = maxScroll;
+      g.txMoreUsed = true;
     };
     canvas.addEventListener('click', handleBriefClick);
+
+    // Mouse-wheel scrolling of the briefing text (desktop)
+    const handleBriefWheel = (e: WheelEvent) => {
+      const g = gsRef.current;
+      if (g.phase !== 'brief') return;
+      const { maxScroll } = briefScrollBounds(g, isTouch);
+      if (maxScroll <= 0) return;
+      e.preventDefault();
+      g.txScroll = Math.max(0, Math.min(maxScroll, g.txScroll + e.deltaY));
+      if (g.txScroll >= maxScroll - 1) g.txMoreUsed = true;
+    };
+    canvas.addEventListener('wheel', handleBriefWheel, { passive: false });
+
+    // ── draggable briefing scrollbar (mouse + touch, via pointer events) ──
+    const scrollbarMetrics = (g: GS) => {
+      const { maxScroll, clipTop, clipH } = briefScrollBounds(g, isTouch);
+      if (maxScroll <= 0) return null;
+      const sbW    = 3;
+      const sbX    = W - TX_PAD - sbW - 3;
+      const thumbH = Math.max(18, clipH * (clipH / (clipH + maxScroll)));
+      const scroll = Math.min(g.txScroll, maxScroll);
+      const thumbY = clipTop + (scroll / maxScroll) * (clipH - thumbH);
+      return { maxScroll, clipTop, clipH, sbX, sbW, thumbH, thumbY };
+    };
+    type SbMetrics = NonNullable<ReturnType<typeof scrollbarMetrics>>;
+    const scrollFromPointer = (g: GS, cy: number, grabOffset: number, m: SbMetrics) => {
+      const travel   = m.clipH - m.thumbH;
+      const clampedY = Math.max(m.clipTop, Math.min(m.clipTop + travel, cy - grabOffset));
+      const frac     = travel > 0 ? (clampedY - m.clipTop) / travel : 0;
+      g.txScroll = frac * m.maxScroll;
+      if (g.txScroll >= m.maxScroll - 1) g.txMoreUsed = true;
+    };
+    let sbDragging = false;
+    let sbGrabOff  = 0;
+    const onScrollPointerDown = (e: PointerEvent) => {
+      scrollDragRef.current = false;
+      const g = gsRef.current;
+      if (g.phase !== 'brief') return;
+      const m = scrollbarMetrics(g);
+      if (!m) return;
+      const { cx, cy } = canvasCoords(e);
+      const inX = cx >= m.sbX - 12 && cx <= m.sbX + m.sbW + 8;   // generous grab zone
+      const inY = cy >= m.clipTop && cy <= m.clipTop + m.clipH;
+      if (!inX || !inY) return;
+      sbDragging = true;
+      scrollDragRef.current = true;                              // suppress the tap-to-advance
+      e.preventDefault();
+      canvas.setPointerCapture?.(e.pointerId);
+      if (cy >= m.thumbY && cy <= m.thumbY + m.thumbH) {
+        sbGrabOff = cy - m.thumbY;                              // grabbed the thumb directly
+      } else {
+        sbGrabOff = m.thumbH / 2;                               // tapped the track → jump under pointer
+        scrollFromPointer(g, cy, sbGrabOff, m);
+      }
+    };
+    const onScrollPointerMove = (e: PointerEvent) => {
+      if (!sbDragging) return;
+      const g = gsRef.current;
+      const m = scrollbarMetrics(g);
+      if (!m) { sbDragging = false; return; }
+      e.preventDefault();
+      scrollFromPointer(g, canvasCoords(e).cy, sbGrabOff, m);
+    };
+    const onScrollPointerUp = (e: PointerEvent) => {
+      if (!sbDragging) return;
+      sbDragging = false;
+      canvas.releasePointerCapture?.(e.pointerId);
+    };
+    canvas.addEventListener('pointerdown',   onScrollPointerDown);
+    canvas.addEventListener('pointermove',   onScrollPointerMove);
+    canvas.addEventListener('pointerup',     onScrollPointerUp);
+    canvas.addEventListener('pointercancel', onScrollPointerUp);
 
     const handleCanvasMouseMove = (e: MouseEvent) => {
       const g = gsRef.current;
@@ -2913,6 +3009,11 @@ export default function GameCanvas() {
       document.removeEventListener('keydown', handleFocusTrap);
       document.removeEventListener('keydown', handleSidiFocusTrap);
       canvas.removeEventListener('click',     handleBriefClick);
+      canvas.removeEventListener('wheel',     handleBriefWheel);
+      canvas.removeEventListener('pointerdown',   onScrollPointerDown);
+      canvas.removeEventListener('pointermove',   onScrollPointerMove);
+      canvas.removeEventListener('pointerup',     onScrollPointerUp);
+      canvas.removeEventListener('pointercancel', onScrollPointerUp);
       canvas.removeEventListener('mousemove', handleCanvasMouseMove);
       pauseEl.removeEventListener('pointerdown', handlePauseDown);
       settingsEl.removeEventListener('pointerdown', toggleSettings);
@@ -2962,10 +3063,13 @@ export default function GameCanvas() {
               if (gs.paused) return;
               if (gs.phase === 'powerup') return; // DOM overlay handles powerup picks
               if (gs.phase === 'brief') {
+                // a scrollbar drag just ended on this touch — don't treat it as a tap
+                if (scrollDragRef.current) { scrollDragRef.current = false; return; }
                 const { maxScroll } = briefScrollBounds(gs, true);
                 const atBottom = maxScroll <= 0 || gs.txScroll >= maxScroll - 1;
                 if (!atBottom) {
-                  gs.txScroll = maxScroll;
+                  gs.txScroll   = maxScroll;
+                  gs.txMoreUsed = true;
                   return;
                 }
                 if (!gs.txDone) {
