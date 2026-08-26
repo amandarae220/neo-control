@@ -36,6 +36,9 @@ const EB_SPD = 150;      // enemy bullet speed px/s (down)
 const MAX_BULLETS    = 3;
 const DOCK_TOL       = 44;   // px from center counted as aligned
 const DOCK_HOLD_TIME = 2.2;  // seconds to hold alignment for successful dock
+
+// Waves that end by docking with a target: wave 1 → NEO-7, wave 2 → Xylon freighter.
+function docksAtEnd(wave: number): boolean { return wave === 1 || wave === 2; }
 const ASCENT_DURATION = 1.8; // seconds for rocket ascent animation
 
 
@@ -110,6 +113,10 @@ const TRANSMISSIONS: WaveBrief[] = [
       'GALACTIC TRANSIT AUTHORITY (GTA). FIVE TO BE EXACT.',
       'THERE IS A WARRANT OUT FOR YOUR CAPTURE…',
       '',
+      'DISAPPEAR VIA THE VELON-4 LAGRANGE POINT.',
+      'A XYLON FREIGHTER WAITS THERE IN HOLDING ORBIT —',
+      'DOCK AND COMMANDEER IT AT THE ROUTE\'S END.',
+      '',
       'PICK AN ESCAPE ROUTE. CHECK FUEL GAUGE BEFORE CHOOSING.',
       '',
       '[1] DEBRIS FIELD',
@@ -125,7 +132,7 @@ const TRANSMISSIONS: WaveBrief[] = [
       { gravMass: 0.5, rockSpeed: 1.7, diveFreq: 1.8, ufoFreq: 1,   bonusMult: 1.3, preDebris: 2,  enemySpawnMult: 0.75, debrisRate: 0 },
     ],
   },
-  { // wave 2 → wave 3: transit to Velon-4 Lagrange point, commandeer freighter
+  { // wave 2 → wave 3: post-commandeer debrief + wave-3 getaway setup
     lines: [
       '>>> NEO CONTROL  //  INCOMING TRANSMISSION',
       '',
@@ -135,13 +142,11 @@ const TRANSMISSIONS: WaveBrief[] = [
       'STANDARD RETURN ROUTE: CLOSED.',
       'REASON: YOU.',
       '',
-      'REROUTING THROUGH THE VELON-4 LAGRANGE POINT.',
-      'THERE IS A FREIGHTER THERE IN HOLDING ORBIT.',
-      'IT IS NOT OURS. IT BELONGS TO XYLONS.',
+      'XYLON FREIGHTER: COMMANDEERED.',
+      'NICE WORK AT THE VELON-4 LAGRANGE POINT.',
       '',
-      'DOCK AND COMMANDEER IT.',
-      'THE XYLON CREW IS ALSO WANTED.',
-      'THEY WILL UNDERSTAND.',
+      'THE CREW WAS ALSO WANTED.',
+      'THEY UNDERSTOOD.',
       '',
       'THE TEXTBOOK ROUTE FOR YOUR GETAWAY',
       'REQUIRES A HOHMANN TRANSFER ORBIT.',
@@ -1237,8 +1242,8 @@ function update(gs: GS, dt: number) {
     }
   });
 
-  /* ── docking sequence: trigger when approach timer completes ── */
-  if (gs.missionKind === 'approach' && !gs.dockSeq && gs.stationProgress >= 1) {
+  /* ── docking sequence: trigger when the mission distance completes ── */
+  if (docksAtEnd(gs.wave) && !gs.dockSeq && gs.stationProgress >= 1) {
     gs.dockSeq      = true;
     gs.enemies      = [];
     gs.bullets      = gs.bullets.filter(b => b.player);
@@ -1263,7 +1268,7 @@ function update(gs: GS, dt: number) {
   }
 
   /* ── wave clear ── */
-  const waveClear = gs.missionKind === 'approach'
+  const waveClear = docksAtEnd(gs.wave)
     ? gs.dockSeq && gs.dockAscent >= 1
     : gs.stationProgress >= 1;
 
@@ -1911,15 +1916,17 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     drawSpr(ctx, eSpr(e.kind), flash ? C.white : col, e.x, e.y + bob);
   });
 
-  // station icon — grows during the docking sequence.
-  // (The pre-dock approach icon + "NEO-7" label were removed: they sat at
-  // top-center and overlapped the centered HI-SCORE HUD readout.)
-  if (gs.missionKind === 'approach' && gs.dockSeq) {
-    const prog  = gs.dockLock / DOCK_HOLD_TIME;
-    const scale = 2 + prog * 2.5;
-    const yPos  = 22 + prog * 55;
+  // dock target — grows during the docking sequence. NEO-7 station for wave 1,
+  // the Xylon freighter for wave 2. (The old pre-dock icon was removed because it
+  // sat at top-center and overlapped the HI-SCORE HUD readout.)
+  if (docksAtEnd(gs.wave) && gs.dockSeq) {
+    const prog = gs.dockLock / DOCK_HOLD_TIME;
     ctx.globalAlpha = 0.8 + 0.2 * Math.sin(t * 8);
-    drawSpr(ctx, SPR.station, C.green, W / 2, yPos, scale);
+    if (gs.wave === 2) {
+      drawSpr(ctx, FREIGHTER_PLAY_SPR, '#9fb2c4', W / 2, 24 + prog * 50, 2 + prog * 2);
+    } else {
+      drawSpr(ctx, SPR.station, C.green, W / 2, 22 + prog * 55, 2 + prog * 2.5);
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -1951,7 +1958,7 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   ctx.globalAlpha = 1;
 
   // docking alignment overlay (hidden once ascent begins)
-  if (gs.missionKind === 'approach' && gs.dockSeq && gs.dockAscent <= 0) {
+  if (docksAtEnd(gs.wave) && gs.dockSeq && gs.dockAscent <= 0) {
     const cx      = W / 2;
     const aligned = Math.abs(gs.px - cx) <= DOCK_TOL;
     const lockPct = gs.dockLock / DOCK_HOLD_TIME;
@@ -1976,11 +1983,16 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
 
-    // status text
-    ctx.font      = "22px 'VT323', monospace";
+    // status text — name the dock target, then the align prompt
+    const dockName   = gs.wave === 2 ? 'XYLON FREIGHTER' : 'NEO-7';
+    const dockAction = gs.wave === 2 ? 'ALIGN TO COMMANDEER' : 'ALIGN FOR DOCK';
     ctx.textAlign = 'center';
+    ctx.font      = "15px 'VT323', monospace";
+    ctx.fillStyle = C.muted;
+    ctx.fillText(dockName, cx, PY - 62);
+    ctx.font      = "22px 'VT323', monospace";
     ctx.fillStyle = aligned ? C.green : C.amber;
-    ctx.fillText(aligned ? 'HOLDING ALIGNMENT' : 'ALIGN FOR DOCK', cx, PY - 44);
+    ctx.fillText(aligned ? 'HOLDING ALIGNMENT' : dockAction, cx, PY - 44);
 
     // direction nudge
     if (!aligned) {
@@ -2010,12 +2022,12 @@ function render(ctx: CanvasRenderingContext2D, gs: GS, t: number, isTouch: boole
   }
 
   // ascent message
-  if (gs.missionKind === 'approach' && gs.dockAscent > 0 && gs.dockAscent < 1) {
+  if (docksAtEnd(gs.wave) && gs.dockAscent > 0 && gs.dockAscent < 1) {
     ctx.font      = "24px 'VT323', monospace";
     ctx.textAlign = 'center';
     ctx.fillStyle = C.green;
     ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 6);
-    ctx.fillText('DOCKING…', W / 2, PY - 30);
+    ctx.fillText(gs.wave === 2 ? 'COMMANDEERING…' : 'DOCKING…', W / 2, PY - 30);
     ctx.globalAlpha = 1;
     ctx.textAlign = 'left';
   }
@@ -2227,8 +2239,8 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS, isTouch = false, t = 0) 
   // wave clear / dock complete banner
   if (gs.waveT > 0) {
     ctx.textAlign = 'center';
-    const label    = gs.missionKind === 'approach' ? 'DOCK COMPLETE' : 'ARRIVED';
-    const sublabel = gs.missionKind === 'approach' ? 'NEO-7' : sectorName(gs.wave);
+    const label    = docksAtEnd(gs.wave) ? (gs.wave === 2 ? 'COMMANDEERED'    : 'DOCK COMPLETE') : 'ARRIVED';
+    const sublabel = docksAtEnd(gs.wave) ? (gs.wave === 2 ? 'XYLON FREIGHTER' : 'NEO-7')         : sectorName(gs.wave);
     ctx.font      = "30px 'VT323', monospace";
     ctx.fillStyle = C.green;
     ctx.fillText(label, W / 2, H / 2 - 20);
@@ -2262,7 +2274,7 @@ function processCheat(gs: GS, raw: string): string {
     case 'SKIPWAVE':
     case 'NEXTWAVE':
     case 'ENDWAVE':
-      if (gs.missionKind === 'approach') {
+      if (docksAtEnd(gs.wave)) {
         gs.enemies    = [];
         gs.dockSeq    = true;
         gs.dockLock   = DOCK_HOLD_TIME;
